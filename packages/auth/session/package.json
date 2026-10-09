@@ -1,0 +1,35 @@
+{
+  "name": "@smartsoft001/auth-session",
+  "version": "2.191.0",
+  "type": "commonjs",
+  "main": "./src/index.js",
+  "typings": "./src/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "Server-side account sessions for NestJS (backend-for-frontend): HttpOnly cookie, sealed provider tokens, CSRF, TOTP-confirmed staff roles, immediate revocation, PostgreSQL store and a Supabase Auth identity provider",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/emiljuchnikowski/smartsoft.git"
+  },
+  "keywords": [
+    "smartsoft",
+    "session",
+    "bff",
+    "totp",
+    "supabase",
+    "nestjs"
+  ],
+  "author": "Emil Juchnikowski",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/emiljuchnikowski/smartsoft/issues"
+  },
+  "homepage": "https://github.com/emiljuchnikowski/smartsoft#readme",
+  "peerDependencies": {
+    "@nestjs/common": "^11.1.5",
+    "@smartsoft001/supabase": "2.191.0",
+    "express": "^5.2.1",
+    "pg": "^8.13.0"
+  }
+}

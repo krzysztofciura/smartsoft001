@@ -1,0 +1,50 @@
+{
+  "name": "auth-session",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/auth/session/src",
+  "projectType": "library",
+  "tags": ["scope:auth", "type:shell"],
+  "generators": {},
+  "targets": {
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": [
+          "packages/auth/session/**/*.{ts,tsx,js,jsx}",
+          "packages/auth/session/package.json"
+        ]
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "options": {
+        "jestConfig": "packages/auth/session/jest.config.ts"
+      },
+      "outputs": ["{workspaceRoot}/coverage/packages/auth/session"]
+    },
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/auth/session",
+        "main": "packages/auth/session/src/index.ts",
+        "tsConfig": "packages/auth/session/tsconfig.lib.json",
+        "assets": ["packages/auth/session/*.md"]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      }
+    },
+    "deploy": {
+      "executor": "ngx-deploy-npm:deploy",
+      "options": {
+        "access": "public",
+        "distFolderPath": "dist/packages/auth/session"
+      },
+      "dependsOn": ["build"]
+    }
+  }
+}
