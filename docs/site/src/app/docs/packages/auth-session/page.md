@@ -102,6 +102,18 @@ cancel(@Req() req: Request, @Param('id') id: string) {
 
 `withAuthorization` (staff with a permission), `withCustomer` (a signed-in account) and `withDelegation` (work of a token issued by a staff member) run the work inside the user's transaction, so a revocation cannot happen half-way.
 
+For controllers that only need to admit staff, `SessionGuard` checks the session (and CSRF for methods other than GET and HEAD) before the handler and sets `req.user` (`{ id, role, permissions }`, read with `@User()` from `@smartsoft001/nestjs`); `@SessionPermission('orders:read')` names the permission. Import `SessionModule` in the module of the controller.
+
+```typescript
+@Controller('reports')
+@UseGuards(SessionGuard)
+export class ReportsController {
+  @Get()
+  @SessionPermission('orders:read')
+  list(@User() user: ISessionUser) {}
+}
+```
+
 ## Other identity providers
 
 Implement `IIdentityProvider` (password sign-in, user by token, e-mail codes, password and e-mail change, sign-out, TOTP) and pass it as `provider`. `ISessionStore` can likewise be replaced; `PgSessionStore` documents the required semantics.

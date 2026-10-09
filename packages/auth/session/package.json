@@ -28,6 +28,7 @@
   "homepage": "https://github.com/emiljuchnikowski/smartsoft#readme",
   "peerDependencies": {
     "@nestjs/common": "^11.1.5",
+    "@nestjs/core": "^11.1.5",
     "@smartsoft001/supabase": "2.191.0",
     "express": "^5.2.1",
     "pg": "^8.13.0"
