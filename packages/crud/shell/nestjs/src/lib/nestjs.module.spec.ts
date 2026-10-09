@@ -113,3 +113,66 @@ describe('crud-nestjs: CrudShellNestjsModule', () => {
     expect(deps).toContainEqual({ index: 1, param: SharedConfig });
   });
 });
+
+describe('crud-nestjs: storage', () => {
+  const persistence: DynamicModule = {
+    module: class SupabaseLikeModule {},
+    providers: [],
+    exports: [],
+  };
+
+  it('should import and export the given persistence module instead of MongoDB', () => {
+    // Arrange
+    const { db: _db, ...withoutDb } = options;
+
+    // Act
+    const dynamicModule = CrudShellNestjsModule.forRoot({
+      ...withoutDb,
+      persistence,
+      restApi: false,
+      socket: false,
+    });
+
+    // Assert
+    expect(dynamicModule.imports).toContain(persistence);
+    expect(dynamicModule.exports).toContain(persistence);
+  });
+
+  it('should keep MongoDB as the default storage', () => {
+    // Act
+    const dynamicModule = CrudShellNestjsModule.forRoot({
+      ...options,
+      restApi: false,
+      socket: false,
+    });
+
+    // Assert
+    expect(
+      (dynamicModule.imports as DynamicModule[]).some(
+        (item) => item?.module?.name === 'MongoModule',
+      ),
+    ).toBe(true);
+  });
+
+  it('should use the persistence module in the core module too', () => {
+    // Act
+    const dynamicModule = CrudShellNestjsCoreModule.forRoot({
+      tokenConfig: options.tokenConfig,
+      persistence,
+    });
+
+    // Assert
+    expect(dynamicModule.imports).toContain(persistence);
+  });
+
+  it('should refuse a module without any storage', () => {
+    // Act & Assert
+    expect(() =>
+      CrudShellNestjsModule.forRoot({
+        tokenConfig: options.tokenConfig,
+        restApi: false,
+        socket: false,
+      }),
+    ).toThrow('A CRUD module needs db (MongoDB) or persistence');
+  });
+});

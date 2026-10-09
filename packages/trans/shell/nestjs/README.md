@@ -16,6 +16,10 @@
 - Provides a core integration module for transaction features in a NestJS app.
 - Static method: `forRoot(config)` — Registers providers and imports required modules with the given configuration.
 
+## 🗄️ Storage
+
+Transactions are stored through the CRUD module: `db` keeps them in the `trans` collection of MongoDB (the default, unchanged), `persistence` in any storage module that provides the `domain-core` repositories, e.g. `SupabaseModule.forRoot({ table: 'trans', ... })` from `@smartsoft001/supabase`.
+
 ## 🛠️ Controllers & Methods
 
 ### TransController

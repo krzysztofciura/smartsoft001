@@ -16,6 +16,23 @@
 - Provides a core integration module for CRUD features in a NestJS app.
 - Static method: `forRoot(options)` — Registers providers and imports required modules with the given configuration.
 
+## 🗄️ Storage
+
+Both modules take their storage from the options: `db` (MongoDB through `@smartsoft001/mongo`, the default, unchanged) or `persistence`, any dynamic module that provides and exports `IItemRepository`, `IAttachmentRepository` and `IUnitOfWork` from `@smartsoft001/domain-core`. `persistence` wins when both are given; a module with neither refuses to start. MongoDB is loaded only when it is used, so `@smartsoft001/mongo` and its driver are optional peers.
+
+```typescript
+CrudShellNestjsModule.forRoot({
+  tokenConfig,
+  persistence: SupabaseModule.forRoot({
+    db: { connectionString: process.env.SUPABASE_DB_URL },
+    table: 'products',
+    type: Product,
+  }),
+  restApi: true,
+  socket: false,
+});
+```
+
 ## 🛠️ Controllers & Methods
 
 ### CrudController

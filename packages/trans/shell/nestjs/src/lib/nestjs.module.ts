@@ -3,7 +3,10 @@ import { DynamicModule, Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 
-import { CrudShellNestjsModule } from '@smartsoft001/crud-shell-nestjs';
+import {
+  CrudShellNestjsModule,
+  ICrudMongoDb,
+} from '@smartsoft001/crud-shell-nestjs';
 import { SharedConfig } from '@smartsoft001/nestjs';
 import { PaynowConfig, PaynowService } from '@smartsoft001/paynow';
 import { PaypalConfig, PaypalService } from '@smartsoft001/paypal';
@@ -26,15 +29,13 @@ export class TransShellNestjsModule {
         revolutConfig?: RevolutConfig;
         paynowConfig?: PaynowConfig;
       } & {
-        db: {
-          host: string;
-          port: number;
-          database: string;
-          username?: string;
-          password?: string;
-          collection?: string;
-          type?: any;
-        };
+        /** MongoDB of the default storage; the module uses its `trans` collection. */
+        db?: ICrudMongoDb;
+        /**
+         * Storage module for the `Trans` entity instead of MongoDB, e.g.
+         * `SupabaseModule.forRoot({ table: 'trans', ... })`.
+         */
+        persistence?: DynamicModule;
       },
   ): DynamicModule {
     return {
@@ -70,10 +71,8 @@ export class TransShellNestjsModule {
         HttpModule,
         CrudShellNestjsModule.forRoot({
           ...config,
-          db: {
-            ...config.db,
-            collection: 'trans',
-          },
+          db: config.db ? { ...config.db, collection: 'trans' } : undefined,
+          persistence: config.persistence,
           restApi: false,
           socket: false,
         }),
@@ -109,15 +108,13 @@ export class TransShellNestjsCoreModule {
         revolutConfig?: RevolutConfig;
         paynowConfig?: PaynowConfig;
       } & {
-        db: {
-          host: string;
-          port: number;
-          database: string;
-          username?: string;
-          password?: string;
-          collection?: string;
-          type?: any;
-        };
+        /** MongoDB of the default storage; the module uses its `trans` collection. */
+        db?: ICrudMongoDb;
+        /**
+         * Storage module for the `Trans` entity instead of MongoDB, e.g.
+         * `SupabaseModule.forRoot({ table: 'trans', ... })`.
+         */
+        persistence?: DynamicModule;
       },
   ): DynamicModule {
     return {
@@ -152,10 +149,8 @@ export class TransShellNestjsCoreModule {
         HttpModule,
         CrudShellNestjsModule.forRoot({
           ...config,
-          db: {
-            ...config.db,
-            collection: 'trans',
-          },
+          db: config.db ? { ...config.db, collection: 'trans' } : undefined,
+          persistence: config.persistence,
           restApi: false,
           socket: false,
         }),

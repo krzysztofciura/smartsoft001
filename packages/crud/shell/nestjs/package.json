@@ -46,5 +46,10 @@
     "rxjs": "^7.8.1",
     "socket.io": "^4.8.1"
   },
-  "homepage": "https://github.com/emiljuchnikowski/smartsoft#readme"
+  "homepage": "https://github.com/emiljuchnikowski/smartsoft#readme",
+  "peerDependenciesMeta": {
+    "@smartsoft001/mongo": {
+      "optional": true
+    }
+  }
 }

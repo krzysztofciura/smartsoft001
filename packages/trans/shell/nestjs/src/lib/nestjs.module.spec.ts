@@ -70,3 +70,38 @@ describe('trans-nestjs: TransShellNestjsCoreModule', () => {
     );
   });
 });
+
+describe('trans-nestjs: storage', () => {
+  it('should hand the persistence module to the CRUD module of the Trans entity', () => {
+    // Arrange
+    const persistence = {
+      module: class TransStorageModule {},
+      providers: [],
+      exports: [],
+    };
+    const { db: _db, ...withoutDb } = baseConfig;
+
+    // Act
+    const dynamicModule = TransShellNestjsModule.forRoot({
+      ...withoutDb,
+      persistence,
+    });
+    const crud = (dynamicModule.imports as Array<{ imports?: unknown[] }>).find(
+      (item) => item?.imports?.includes(persistence),
+    );
+
+    // Assert
+    expect(crud).toBeDefined();
+  });
+
+  it('should keep the trans collection of MongoDB by default', () => {
+    // Act
+    const dynamicModule = TransShellNestjsCoreModule.forRoot(baseConfig);
+    const mongo = JSON.stringify(dynamicModule.imports, (key, value) =>
+      key === 'module' && typeof value === 'function' ? value.name : value,
+    );
+
+    // Assert
+    expect(mongo).toContain('"collection":"trans"');
+  });
+});

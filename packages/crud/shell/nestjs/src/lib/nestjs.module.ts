@@ -3,36 +3,27 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 
 import { SERVICES } from '@smartsoft001/crud-shell-app-services';
-import { MongoModule } from '@smartsoft001/mongo';
 import { SharedConfig, SharedModule } from '@smartsoft001/nestjs';
 
 import { CONTROLLERS } from './controllers';
 import { ICrudQueryConfig } from './crud-query.config';
+import { crudStorage, ICrudStorageOptions } from './crud-storage';
 import { GATEWAYS } from './gateways';
 import { AuthJwtGuard } from './guards/auth/auth.guard';
 
 @Module({})
 export class CrudShellNestjsModule {
   static forRoot<T>(
-    options: SharedConfig & {
-      db: {
-        host: string;
-        port: number;
-        database: string;
-        username?: string;
-        password?: string;
-        collection?: string;
-        type?: T;
-      };
-    } & {
-      restApi: boolean;
-      socket: boolean;
-    } & ICrudQueryConfig,
+    options: SharedConfig & {} & ICrudStorageOptions & {
+        restApi: boolean;
+        socket: boolean;
+      } & ICrudQueryConfig,
   ): DynamicModule {
     // Without a token config the REST API is served without JWT auth, as before.
     const tokenConfig = options.tokenConfig;
     // The model type reaches CrudService through SharedConfig, for validation.
     const config = { ...options, type: options.type ?? options.db?.type };
+    const storage = crudStorage(options);
 
     return {
       module: CrudShellNestjsModule,
@@ -59,9 +50,9 @@ export class CrudShellNestjsModule {
             ]
           : []),
         SharedModule.forFeature(config),
-        MongoModule.forRoot(options.db),
+        storage,
       ],
-      exports: [...SERVICES, AuthJwtGuard, MongoModule.forRoot(options.db)],
+      exports: [...SERVICES, AuthJwtGuard, storage],
     };
   }
 }
@@ -75,16 +66,7 @@ export class CrudShellNestjsCoreModule {
   static forRoot<T>(
     options: SharedConfig & {
       tokenConfig: NonNullable<SharedConfig['tokenConfig']>;
-      db: {
-        host: string;
-        port: number;
-        database: string;
-        username?: string;
-        password?: string;
-        collection?: string;
-        type?: any;
-      };
-    },
+    } & ICrudStorageOptions,
   ): DynamicModule {
     const config = { ...options, type: options.type ?? options.db?.type };
 
@@ -99,8 +81,9 @@ export class CrudShellNestjsCoreModule {
             expiresIn: options.tokenConfig.expiredIn,
           },
         }),
-        SharedModule.forRoot(config),
-        MongoModule.forRoot(options.db),
+        // forRoot only wraps forFeature (its db settings are unused), so the core module needs no MongoDB settings.
+        SharedModule.forFeature(config),
+        crudStorage(options),
       ],
       exports: [],
     };
