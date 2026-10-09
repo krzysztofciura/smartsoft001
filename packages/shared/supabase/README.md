@@ -78,9 +78,12 @@ One row per item: `id` (text primary key), the document in `data` (jsonb) or `en
 
 ### SupabaseAttachmentRepository
 
-Supabase Storage, one immutable object per attachment id in `bucket` (`x-upsert: false`), written with `serviceKey`; the file name is stored as object metadata. `getStream` honours a byte range. Ids are limited to `[A-Za-z0-9][A-Za-z0-9_.-]*`; a missing object gives `null` from `getInfo` and is ignored by `delete`. Errors (`SupabaseStorageError`) carry a status but never keys or response bodies.
+Supabase Storage, one immutable object per attachment id in `bucket` (or in its `folder`, e.g. one per tenant: `bucket/folder/id`) (`x-upsert: false`), written with `serviceKey` (the service role or a scoped JWT); the file name is stored as object metadata. `getStream` honours a byte range. Ids are limited to `[A-Za-z0-9][A-Za-z0-9_.-]*`; a missing object gives `null` from `getInfo` and is ignored by `delete`. Errors (`SupabaseStorageError`) carry a status but never keys or response bodies.
 
 ### SupabaseUnitOfWork
+
+The pool comes from `db`: a connection string (the package creates, configures and closes the pool), or `db.pool`, a `pg` pool the application already has — e.g. one per database login, shared by several features — which the package uses as it is and never closes.
+
 
 `scope(async (transaction) => …)` runs on one client between `BEGIN` and `COMMIT`; any error rolls back and is rethrown. `transaction.connection` is that client. A client whose rollback fails is discarded instead of returned to the pool.
 

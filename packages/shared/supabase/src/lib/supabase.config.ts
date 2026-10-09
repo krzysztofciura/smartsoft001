@@ -1,4 +1,4 @@
-import type { PoolClient, PoolConfig } from 'pg';
+import type { Pool, PoolClient, PoolConfig } from 'pg';
 
 /**
  * Encrypts the stored document of an item (envelope encryption, e.g. a fresh
@@ -25,8 +25,13 @@ export interface ISupabaseCipherContext {
 
 /** PostgreSQL connection of the Supabase project (direct or through the pooler). */
 export interface ISupabaseDbConfig {
-  /** `postgres://user:password@host:port/database`; credentials never appear in errors. */
-  connectionString: string;
+  /** `postgres://user:password@host:port/database`; credentials never appear in errors. Required unless `pool` is given. */
+  connectionString?: string;
+  /**
+   * A pool the application already has (e.g. one per database login, shared by several features and by its own role
+   * checks). The package uses it as it is — every other field here is ignored — and never ends it: the application does.
+   */
+  pool?: Pool;
   /**
    * TLS for the connection. `true` verifies the server certificate against the
    * system roots; pass `{ ca }` for a project certificate. Default `true`.
@@ -81,6 +86,11 @@ export class SupabaseConfig {
   context?: (client: PoolClient) => Promise<void>;
   /** Writes `{ type, table, item, user, error, date }` to this table for every write. Off by default. */
   changeLog?: string;
+  /**
+   * Folder of the attachment repository inside `bucket` (e.g. one per tenant), `[A-Za-z0-9_-]{1,100}`: objects are
+   * stored as `bucket/folder/id`. Without it, `bucket/id`.
+   */
+  folder?: string;
   /** Storage bucket of the attachment repository. */
   bucket?: string;
   /** Model class whose `search` fields answer `$search` criteria. */

@@ -113,17 +113,27 @@ describe('shared-supabase: SupabasePool settings', () => {
     jest.resetModules();
     const created: Record<string, unknown>[] = [];
     jest.doMock('pg', () => ({
-      Pool: jest.fn().mockImplementation((settings: Record<string, unknown>) => {
-        created.push(settings);
-        return { on: jest.fn(), connect: jest.fn().mockResolvedValue({}), end: jest.fn() };
-      }),
+      Pool: jest
+        .fn()
+        .mockImplementation((settings: Record<string, unknown>) => {
+          created.push(settings);
+          return {
+            on: jest.fn(),
+            connect: jest.fn().mockResolvedValue({}),
+            end: jest.fn(),
+          };
+        }),
     }));
     const { SupabasePool: Isolated } = await import('./supabase.pool');
     const pool = new Isolated({
       table: 'items',
       db: {
         connectionString: 'postgres://u:p@db:5432/app',
-        options: { application_name: 'shop', ssl: false, connectionString: 'postgres://evil' } as never,
+        options: {
+          application_name: 'shop',
+          ssl: false,
+          connectionString: 'postgres://evil',
+        } as never,
       },
     } as SupabaseConfig);
 

@@ -7,6 +7,7 @@ import { Readable } from 'stream';
 import { SupabaseConfig } from '../supabase.config';
 
 const OBJECT_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/;
+const FOLDER = /^[A-Za-z0-9_-]{1,100}$/;
 const TIMEOUT = 30000;
 
 /** A Storage request failed; the message never carries keys, URLs with tokens or response bodies. */
@@ -136,7 +137,12 @@ export class SupabaseAttachmentRepository<
       throw new SupabaseStorageError(400, 'Invalid attachment id');
     if (!this.config.bucket || !OBJECT_ID.test(this.config.bucket))
       throw new SupabaseStorageError(500, 'SupabaseConfig.bucket is required');
-    return `${this.config.bucket}/${id}`;
+    const folder = this.config.folder;
+    if (folder !== undefined && !FOLDER.test(folder))
+      throw new SupabaseStorageError(500, 'Invalid SupabaseConfig.folder');
+    return folder === undefined
+      ? `${this.config.bucket}/${id}`
+      : `${this.config.bucket}/${folder}/${id}`;
   }
 
   protected get baseUrl(): string {

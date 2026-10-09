@@ -6,7 +6,9 @@ import { SupabaseConfig } from './supabase.config';
 
 /**
  * One connection pool per `SupabaseModule.forRoot` call, shared by its
- * repositories and unit of work and closed with the Nest application.
+ * repositories and unit of work and closed with the Nest application, or a
+ * pool of the application (`db.pool`), which it then neither configures nor
+ * closes.
  * Unlike `MongoItemRepository`, which connects per operation, PostgreSQL
  * connections are reused.
  */
@@ -59,12 +61,14 @@ export class SupabasePool implements OnModuleDestroy {
   async onModuleDestroy(): Promise<void> {
     const pool = this.pool;
     this.pool = undefined;
-    await pool?.end();
+    // A pool given by the application stays open: it may serve other features.
+    if (pool && pool !== this.config.db?.pool) await pool.end();
   }
 
   private getPool(): Pool {
     if (this.pool) return this.pool;
     const db = this.config.db;
+    if (db?.pool) return (this.pool = db.pool);
     if (!db?.connectionString)
       throw new Error('SupabaseConfig.db.connectionString is required');
     const ssl = db.ssl ?? true;
