@@ -1,0 +1,41 @@
+{
+  "name": "shared-gus",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/shared/gus/src",
+  "projectType": "library",
+  "tags": ["scope:shared", "type:util"],
+  "generators": {},
+  "targets": {
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "options": {
+        "lintFilePatterns": [
+          "packages/shared/gus/**/*.{ts,tsx,js,jsx}",
+          "packages/shared/gus/package.json"
+        ]
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "options": {
+        "jestConfig": "packages/shared/gus/jest.config.ts"
+      },
+      "outputs": ["{workspaceRoot}/coverage/packages/shared/gus"]
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      }
+    },
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/shared/gus",
+        "main": "packages/shared/gus/src/index.ts",
+        "tsConfig": "packages/shared/gus/tsconfig.lib.json",
+        "assets": ["packages/shared/gus/*.md"]
+      }
+    }
+  }
+}

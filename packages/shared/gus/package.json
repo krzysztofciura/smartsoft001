@@ -1,0 +1,25 @@
+{
+  "name": "@smartsoft001/gus",
+  "version": "2.191.0",
+  "type": "commonjs",
+  "main": "./src/index.js",
+  "typings": "./src/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "NIP lookup in the GUS REGON register (BIR1.1)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/emiljuchnikowski/smartsoft.git"
+  },
+  "author": "Emil Juchnikowski",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/emiljuchnikowski/smartsoft/issues"
+  },
+  "homepage": "https://github.com/emiljuchnikowski/smartsoft#readme",
+  "peerDependencies": {
+    "@nestjs/common": "^11.1.5",
+    "@smartsoft001/utils": "2.191.0"
+  }
+}
