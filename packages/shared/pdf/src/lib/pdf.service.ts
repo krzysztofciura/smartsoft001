@@ -7,6 +7,16 @@ const MARGIN = 56;
 const FOOTER = 24;
 const INK = '#1f2a26';
 const MUTED = '#5b6b64';
+/**
+ * Ligatures off: a ligature glyph (fi, fl) breaks copying and searching the text (names, NIP, addresses), which matters
+ * more in business documents than typographic polish. fontkit takes an object of feature switches.
+ */
+const PLAIN = {
+  features: {
+    liga: false,
+    clig: false,
+  } as unknown as PDFKit.Mixins.OpenTypeFeatures[],
+};
 
 /** Plain text for the document: control and bidi-override characters dropped, newlines kept (single-line text when asked). */
 export function pdfText(value: unknown, singleLine = false): string {
@@ -92,7 +102,7 @@ export class PdfService {
           .font('bold')
           .fontSize(17)
           .fillColor(INK)
-          .text(pdfText(block.text, true), { lineGap: 2 });
+          .text(pdfText(block.text, true), { ...PLAIN, lineGap: 2 });
         doc.moveDown(0.6);
         return;
       case 'heading':
@@ -102,7 +112,7 @@ export class PdfService {
           .font('bold')
           .fontSize(11.5)
           .fillColor(INK)
-          .text(pdfText(block.text, true));
+          .text(pdfText(block.text, true), PLAIN);
         doc.moveDown(0.3);
         return;
       case 'paragraph':
@@ -110,7 +120,7 @@ export class PdfService {
           .font('regular')
           .fontSize(9.5)
           .fillColor(INK)
-          .text(pdfText(block.text), { lineGap: 2.2 });
+          .text(pdfText(block.text), { ...PLAIN, lineGap: 2.2 });
         doc.moveDown(0.45);
         return;
       case 'note':
@@ -118,7 +128,7 @@ export class PdfService {
           .font('regular')
           .fontSize(8)
           .fillColor(MUTED)
-          .text(pdfText(block.text), { lineGap: 1.5 });
+          .text(pdfText(block.text), { ...PLAIN, lineGap: 1.5 });
         doc.fillColor(INK).moveDown(0.4);
         return;
       case 'fields':
@@ -127,8 +137,14 @@ export class PdfService {
             .font('bold')
             .fontSize(9.5)
             .fillColor(INK)
-            .text(pdfText(label, true) + ': ', { continued: true, lineGap: 2 });
-          doc.font('regular').text(pdfText(value, true) || '—', { lineGap: 2 });
+            .text(pdfText(label, true) + ': ', {
+              ...PLAIN,
+              continued: true,
+              lineGap: 2,
+            });
+          doc
+            .font('regular')
+            .text(pdfText(value, true) || '—', { ...PLAIN, lineGap: 2 });
         }
         doc.moveDown(0.45);
         return;
@@ -160,7 +176,7 @@ export class PdfService {
       const height =
         Math.max(
           ...texts.map((t, i) =>
-            doc.heightOfString(t, { width: widths[i] - 2 * pad }),
+            doc.heightOfString(t, { ...PLAIN, width: widths[i] - 2 * pad }),
           ),
         ) +
         2 * pad;
@@ -176,6 +192,7 @@ export class PdfService {
       let x = left;
       texts.forEach((t, i) => {
         doc.text(t, x + pad, top + pad, {
+          ...PLAIN,
           width: widths[i] - 2 * pad,
           align: block.columns[i].align ?? 'left',
         });
@@ -214,6 +231,7 @@ export class PdfService {
           MARGIN,
           doc.page.height - MARGIN,
           {
+            ...PLAIN,
             width: this.width,
             align: 'center',
             lineBreak: false,

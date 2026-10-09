@@ -2,7 +2,6 @@ import { Test } from '@nestjs/testing';
 
 import { join } from 'node:path';
 
-
 import { PdfConfig } from './pdf.config';
 import { PdfModule } from './pdf.module';
 import { PdfService, pdfText } from './pdf.service';
@@ -101,7 +100,9 @@ describe('shared-pdf: PdfService', () => {
     ).render({ title: 'Łódź', blocks: [] });
 
     // A UTF-16BE string with its byte order mark: FE FF 01 41 (Ł) ...
-    expect(pdf.includes(Buffer.from([0x28, 0xfe, 0xff, 0x01, 0x41]))).toBe(true);
+    expect(pdf.includes(Buffer.from([0x28, 0xfe, 0xff, 0x01, 0x41]))).toBe(
+      true,
+    );
   });
 });
 
