@@ -1,4 +1,4 @@
-import type { PoolClient } from 'pg';
+import type { PoolClient, PoolConfig } from 'pg';
 
 /**
  * Encrypts the stored document of an item (envelope encryption, e.g. a fresh
@@ -36,6 +36,11 @@ export interface ISupabaseDbConfig {
   max?: number;
   /** `statement_timeout` in milliseconds for every connection. Default `15000`. */
   statementTimeout?: number;
+  /**
+   * Further `pg` pool settings (timeouts, `application_name`, …). The
+   * connection string and TLS always come from the fields above.
+   */
+  options?: Omit<PoolConfig, 'connectionString' | 'ssl'>;
 }
 
 /**

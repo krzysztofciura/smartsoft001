@@ -106,3 +106,38 @@ describe('shared-supabase: SupabasePool', () => {
     expect(() => invalid.table).toThrow();
   });
 });
+
+describe('shared-supabase: SupabasePool settings', () => {
+  it('should pass pool options through while TLS and the URL come only from the config', async () => {
+    // Arrange
+    jest.resetModules();
+    const created: Record<string, unknown>[] = [];
+    jest.doMock('pg', () => ({
+      Pool: jest.fn().mockImplementation((settings: Record<string, unknown>) => {
+        created.push(settings);
+        return { on: jest.fn(), connect: jest.fn().mockResolvedValue({}), end: jest.fn() };
+      }),
+    }));
+    const { SupabasePool: Isolated } = await import('./supabase.pool');
+    const pool = new Isolated({
+      table: 'items',
+      db: {
+        connectionString: 'postgres://u:p@db:5432/app',
+        options: { application_name: 'shop', ssl: false, connectionString: 'postgres://evil' } as never,
+      },
+    } as SupabaseConfig);
+
+    // Act
+    await pool.connect();
+
+    // Assert
+    expect(created[0]).toMatchObject({
+      application_name: 'shop',
+      connectionString: 'postgres://u:p@db:5432/app',
+      ssl: { rejectUnauthorized: true },
+      max: 5,
+      statement_timeout: 15000,
+    });
+    jest.dontMock('pg');
+  });
+});

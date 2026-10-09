@@ -69,6 +69,7 @@ export class SupabasePool implements OnModuleDestroy {
       throw new Error('SupabaseConfig.db.connectionString is required');
     const ssl = db.ssl ?? true;
     this.pool = new Pool({
+      ...db.options,
       connectionString: db.connectionString,
       // TLS settings come only from the configuration, never from URL parameters.
       ssl:
