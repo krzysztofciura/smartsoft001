@@ -1,0 +1,50 @@
+{
+  "name": "shared-supabase",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/shared/supabase/src",
+  "projectType": "library",
+  "tags": ["scope:shared", "type:util"],
+  "generators": {},
+  "targets": {
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": [
+          "packages/shared/supabase/**/*.{ts,tsx,js,jsx}",
+          "packages/shared/supabase/package.json"
+        ]
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "options": {
+        "jestConfig": "packages/shared/supabase/jest.config.ts"
+      },
+      "outputs": ["{workspaceRoot}/coverage/packages/shared/supabase"]
+    },
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/shared/supabase",
+        "main": "packages/shared/supabase/src/index.ts",
+        "tsConfig": "packages/shared/supabase/tsconfig.lib.json",
+        "assets": ["packages/shared/supabase/*.md"]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      }
+    },
+    "deploy": {
+      "executor": "ngx-deploy-npm:deploy",
+      "options": {
+        "access": "public",
+        "distFolderPath": "dist/packages/shared/supabase"
+      },
+      "dependsOn": ["build"]
+    }
+  }
+}

@@ -56,6 +56,7 @@
       "@smartsoft001/payu": ["packages/shared/payu/src/index.ts"],
       "@smartsoft001/react": ["packages/shared/react/src/index.ts"],
       "@smartsoft001/revolut": ["packages/shared/revolut/src/index.ts"],
+      "@smartsoft001/supabase": ["packages/shared/supabase/src/index.ts"],
       "@smartsoft001/trans-domain": ["packages/trans/domain/src/index.ts"],
       "@smartsoft001/trans-shell-app-services": [
         "packages/trans/shell/app-services/src/index.ts"
