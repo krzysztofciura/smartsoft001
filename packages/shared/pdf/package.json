@@ -1,0 +1,27 @@
+{
+  "name": "@smartsoft001/pdf",
+  "version": "2.191.0",
+  "type": "commonjs",
+  "main": "./src/index.js",
+  "typings": "./src/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "Server-side PDF documents (A4, embedded fonts, declarative blocks) on pdfkit",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/emiljuchnikowski/smartsoft.git"
+  },
+  "author": "Emil Juchnikowski",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/emiljuchnikowski/smartsoft/issues"
+  },
+  "homepage": "https://github.com/emiljuchnikowski/smartsoft#readme",
+  "dependencies": {
+    "pdfkit": "0.20.2"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^11.1.5"
+  }
+}

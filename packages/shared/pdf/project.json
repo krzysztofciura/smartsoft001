@@ -1,0 +1,41 @@
+{
+  "name": "shared-pdf",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/shared/pdf/src",
+  "projectType": "library",
+  "tags": ["scope:shared", "type:util"],
+  "generators": {},
+  "targets": {
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "options": {
+        "lintFilePatterns": [
+          "packages/shared/pdf/**/*.{ts,tsx,js,jsx}",
+          "packages/shared/pdf/package.json"
+        ]
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "options": {
+        "jestConfig": "packages/shared/pdf/jest.config.ts"
+      },
+      "outputs": ["{workspaceRoot}/coverage/packages/shared/pdf"]
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      }
+    },
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/shared/pdf",
+        "main": "packages/shared/pdf/src/index.ts",
+        "tsConfig": "packages/shared/pdf/tsconfig.lib.json",
+        "assets": ["packages/shared/pdf/*.md"]
+      }
+    }
+  }
+}
