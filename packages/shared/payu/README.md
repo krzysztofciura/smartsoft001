@@ -25,7 +25,21 @@ Methods:
         <td>refund</td>
         <td>Issues a refund for an existing payment order</td>
     </tr>
+    <tr>
+        <td>refundAmount</td>
+        <td>Refunds an amount, with the refund key as <code>extRefundId</code></td>
+    </tr>
+    <tr>
+        <td>refundStatus</td>
+        <td>Reads a refund: <code>PENDING</code> → pending, <code>FINALIZED</code> → succeeded, <code>CANCELED</code> → failed</td>
+    </tr>
 </table>
+
+Payment states `NEW`, `PENDING` and `WAITING_FOR_CONFIRMATION` are reported as `pending`. Enable
+automatic receipt in the PayU shop, otherwise payments wait for a manual confirmation there.
+
+When a `PAYU_CONFIG_PROVIDER` is registered and fails, the call fails too: the static `PayuConfig`
+is used only when no provider is registered.
 
 ## ⚠️ Errors
 
@@ -37,6 +51,7 @@ client secret or the `Authorization: Bearer` token. Each method logs one line th
 - `PayU order creation failed (HTTP {status})`
 - `PayU status lookup failed (HTTP {status})`
 - `PayU refund failed (HTTP {status})`
+- `PayU refund status lookup failed (HTTP {status})`
 
 The ` (HTTP {status})` suffix is present only when PayU answered, so `401` and `5xx` stay
 distinguishable. Code that read `e.response` from these errors must read the message instead.

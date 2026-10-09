@@ -65,6 +65,8 @@ describe('trans: TransService', () => {
 
     mockRefundService = {
       refund: jest.fn(),
+      refundAmount: jest.fn(),
+      refundStatus: jest.fn(),
     } as any;
 
     mockHttpService = {
@@ -223,6 +225,39 @@ describe('trans: TransService', () => {
         mockInternalService,
         expect.any(Object),
         comment,
+      );
+    });
+  });
+
+  describe('refundAmount and refundStatus', () => {
+    it('should pass the request and the payment services to the refund service', async () => {
+      const request = { amount: 100, key: 'refund-1', comment: 'Partial' };
+      mockRefundService.refundAmount.mockResolvedValue({
+        refundId: 'r1',
+        status: 'pending',
+      });
+      mockRefundService.refundStatus.mockResolvedValue({
+        refundId: 'r1',
+        status: 'succeeded',
+      });
+
+      expect(await service.refundAmount('trans-1', request)).toEqual({
+        refundId: 'r1',
+        status: 'pending',
+      });
+      expect(await service.refundStatus('trans-1', 'refund-1')).toEqual({
+        refundId: 'r1',
+        status: 'succeeded',
+      });
+      expect(mockRefundService.refundAmount).toHaveBeenCalledWith(
+        'trans-1',
+        expect.objectContaining({ payu: mockPayuService }),
+        request,
+      );
+      expect(mockRefundService.refundStatus).toHaveBeenCalledWith(
+        'trans-1',
+        expect.objectContaining({ paynow: mockPaynowService }),
+        'refund-1',
       );
     });
   });

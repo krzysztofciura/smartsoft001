@@ -54,4 +54,38 @@ export interface ITransPaymentSingleService {
   getStatus<T>(trans: Trans<T>): Promise<{ status: TransStatus; data: any }>;
 
   refund(trans: Trans<any>, comment: string): Promise<any>;
+
+  /**
+   * Returns `amount` of a completed payment. `key` identifies this refund at
+   * the provider (its external refund id or idempotency key), so a retry
+   * after a lost answer never refunds twice.
+   */
+  refundAmount?(
+    trans: Trans<any>,
+    refund: ITransRefundRequest,
+  ): Promise<ITransRefundResult>;
+
+  /** Current state of a refund started with `refundAmount`. */
+  refundStatus?(
+    trans: Trans<any>,
+    refundId: string,
+  ): Promise<ITransRefundResult>;
+}
+
+export interface ITransRefundRequest {
+  /** Positive safe integer in the smallest currency unit, at most what is left to refund. */
+  amount: number;
+  /** 1–64 characters `[A-Za-z0-9_-]`, unique per refund. */
+  key: string;
+  comment: string;
+}
+
+/**
+ * A refund as the provider reports it: `pending` until the provider settles
+ * it, then `succeeded` or `failed`. `refundId` is the provider's id.
+ */
+export interface ITransRefundResult {
+  refundId: string;
+  status: 'pending' | 'succeeded' | 'failed';
+  data?: unknown;
 }

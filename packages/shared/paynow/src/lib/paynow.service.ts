@@ -6,10 +6,14 @@ import { firstValueFrom } from 'rxjs';
 
 import {
   ITransPaymentSingleService,
+  ITransRefundRequest,
+  ITransRefundResult,
   Trans,
   TransStatus,
 } from '@smartsoft001/trans-domain';
 import { GuidService } from '@smartsoft001/utils';
+
+import { createHash } from 'crypto';
 
 import {
   IPaynowConfigProvider,
@@ -178,6 +182,92 @@ export class PaynowService implements ITransPaymentSingleService {
     }
   }
 
+  /**
+   * Partial refund. The refund key becomes the `Idempotency-Key` (at most 45
+   * characters; longer keys are hashed), so a retry never refunds twice.
+   */
+  async refundAmount(
+    trans: Trans<any>,
+    refund: ITransRefundRequest,
+  ): Promise<ITransRefundResult> {
+    const orderId = this.getOrderId(trans);
+    const config = await this.getConfig(trans.data);
+    const data = {
+      amount: refund.amount,
+      ...(refund.comment ? { description: refund.comment.slice(0, 255) } : {}),
+    };
+    const key =
+      refund.key.length <= 45
+        ? refund.key
+        : createHash('sha256').update(refund.key).digest('hex').slice(0, 45);
+
+    let response;
+    try {
+      response = await firstValueFrom(
+        this.httpService.post(
+          this.getBaseUrl(config) +
+            '/v1/payments/' +
+            encodeURIComponent(orderId) +
+            '/refunds',
+          data,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Api-Key': config.apiKey,
+              'Idempotency-Key': key,
+              Signature: this.getSignature(data, config),
+            },
+            maxRedirects: 0,
+          },
+        ),
+      );
+    } catch (e) {
+      throw paynowFailure('refund', e);
+    }
+
+    return this.refundResult(response.data);
+  }
+
+  async refundStatus(
+    trans: Trans<any>,
+    refundId: string,
+  ): Promise<ITransRefundResult> {
+    const config = await this.getConfig(trans.data);
+
+    let response;
+    try {
+      response = await firstValueFrom(
+        this.httpService.get(
+          this.getBaseUrl(config) +
+            '/v1/refunds/' +
+            encodeURIComponent(refundId) +
+            '/status',
+          {
+            headers: { 'Api-Key': config.apiKey },
+            maxRedirects: 0,
+          },
+        ),
+      );
+    } catch (e) {
+      throw paynowFailure('refund status lookup', e);
+    }
+
+    return this.refundResult(response.data);
+  }
+
+  /** Paynow refund states: NEW and PENDING until settled, then SUCCESSFUL, FAILED or CANCELLED. */
+  private refundResult(refund: any): ITransRefundResult {
+    if (typeof refund?.refundId !== 'string' || !refund.refundId)
+      throw new Error('Paynow refund answer without a refund id');
+    const status =
+      refund.status === 'SUCCESSFUL'
+        ? 'succeeded'
+        : refund.status === 'FAILED' || refund.status === 'CANCELLED'
+          ? 'failed'
+          : 'pending';
+    return { refundId: refund.refundId, status };
+  }
+
   private getOrderId(trans: Trans<any>): string {
     const historyItem = trans.history.find((x) => x.status === 'started');
 
@@ -191,17 +281,20 @@ export class PaynowService implements ITransPaymentSingleService {
   }
 
   private async getConfig(data: any): Promise<PaynowConfig> {
+    let provider: IPaynowConfigProvider | undefined;
     try {
-      const provider: IPaynowConfigProvider = this.moduleRef.get(
-        PAYNOW_CONFIG_PROVIDER,
-        { strict: false },
-      );
-      return await provider.get(data);
-    } catch (e) {
+      provider = this.moduleRef.get(PAYNOW_CONFIG_PROVIDER, { strict: false });
+    } catch {
+      provider = undefined;
+    }
+    if (!provider) {
       Logger.warn('Paynow config provider not found', PaynowService.name);
+      return this.config;
     }
 
-    return this.config;
+    // A provider that fails (settings missing or unreadable) stops the call:
+    // falling back to the static configuration could use other credentials.
+    return provider.get(data);
   }
 
   private getBaseUrl(config: PaynowConfig): string {
@@ -215,7 +308,11 @@ export class PaynowService implements ITransPaymentSingleService {
       case 'CONFIRMED':
         return 'completed';
       case 'REJECTED':
+      case 'ERROR':
+      case 'EXPIRED':
+      case 'ABANDONED':
         return 'canceled';
+      case 'NEW':
       case 'PENDING':
         return 'pending';
       default:

@@ -39,7 +39,33 @@ Methods:
         <td>refund</td>
         <td>Processes a refund for a completed transaction and updates its status and history.</td>
     </tr>
+    <tr>
+        <td>refundAmount</td>
+        <td>Returns part or all of a completed payment, idempotently per refund key.</td>
+    </tr>
+    <tr>
+        <td>refundStatus</td>
+        <td>Reads the provider's state of a refund started with <code>refundAmount</code>.</td>
+    </tr>
 </table>
+
+#### Partial and repeated refunds
+
+`refundAmount(transId, paymentService, { amount, key, comment })` needs a payment service with
+`refundAmount` (PayU and Paynow have it). `amount` is a positive integer in the smallest unit and
+at most what is left after earlier refunds that did not fail; `key` (`[A-Za-z0-9_-]{1,64}`)
+identifies the refund at the provider, so retrying a lost answer with the same key never pays twice.
+A repeated key with a recorded answer is answered from the history without calling the provider.
+
+Each refund is a history entry with the status `refund` and `data.refund` =
+`{ key, amount, refundId, status }` (`pending`, `succeeded`, `failed`, or `unknown` when the
+provider call failed; the error is stored in its safe form). The transaction itself keeps the status
+`completed`, which is what the provider keeps reporting for the payment, so a later status refresh
+does not undo the refunds. `refundStatus(transId, paymentService, key)` asks the provider about a
+pending refund and records the change.
+
+Both hold the refresh lease while they work (when the repository has `compareAndSet`) and re-read
+the transaction under it, so refunds and refreshes of one transaction do not overwrite each other.
 
 ### TransConfig
 

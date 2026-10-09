@@ -5,6 +5,8 @@ import { firstValueFrom } from 'rxjs';
 
 import {
   ITransPaymentSingleService,
+  ITransRefundRequest,
+  ITransRefundResult,
   Trans,
   TransStatus,
 } from '@smartsoft001/trans-domain';
@@ -213,7 +215,10 @@ export class PayuService implements ITransPaymentSingleService {
     try {
       const response = await firstValueFrom(
         this.httpService.post(
-          this.getBaseUrl(config) + '/api/v2_1/orders/' + orderId,
+          this.getBaseUrl(config) +
+            '/api/v2_1/orders/' +
+            encodeURIComponent(orderId) +
+            '/refunds',
           {
             refund: {
               description: comment,
@@ -236,6 +241,93 @@ export class PayuService implements ITransPaymentSingleService {
     }
   }
 
+  /**
+   * Partial refund. `extRefundId` is the refund key, so PayU refuses a second
+   * refund with the same key instead of paying it out twice.
+   */
+  async refundAmount(
+    trans: Trans<any>,
+    refund: ITransRefundRequest,
+  ): Promise<ITransRefundResult> {
+    const orderId = this.getOrderId(trans);
+    const config = await this.getConfig(trans.data);
+    const token = await this.getToken(config);
+
+    let response;
+    try {
+      response = await firstValueFrom(
+        this.httpService.post(
+          this.getBaseUrl(config) +
+            '/api/v2_1/orders/' +
+            encodeURIComponent(orderId) +
+            '/refunds',
+          {
+            refund: {
+              description: refund.comment || 'Refund',
+              amount: refund.amount,
+              extRefundId: refund.key,
+              currencyCode: 'PLN',
+            },
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: 'Bearer ' + token,
+            },
+            maxRedirects: 0,
+          },
+        ),
+      );
+    } catch (e) {
+      throw payuFailure('refund', e);
+    }
+
+    return this.refundResult(response.data?.refund);
+  }
+
+  async refundStatus(
+    trans: Trans<any>,
+    refundId: string,
+  ): Promise<ITransRefundResult> {
+    const orderId = this.getOrderId(trans);
+    const config = await this.getConfig(trans.data);
+    const token = await this.getToken(config);
+
+    let response;
+    try {
+      response = await firstValueFrom(
+        this.httpService.get(
+          this.getBaseUrl(config) +
+            '/api/v2_1/orders/' +
+            encodeURIComponent(orderId) +
+            '/refunds/' +
+            encodeURIComponent(refundId),
+          {
+            headers: { Authorization: 'Bearer ' + token },
+            maxRedirects: 0,
+          },
+        ),
+      );
+    } catch (e) {
+      throw payuFailure('refund status lookup', e);
+    }
+
+    return this.refundResult(response.data);
+  }
+
+  /** PayU refund states: PENDING until settled, then FINALIZED or CANCELED. */
+  private refundResult(refund: any): ITransRefundResult {
+    if (typeof refund?.refundId !== 'string' || !refund.refundId)
+      throw new Error('PayU refund answer without a refund id');
+    const status =
+      refund.status === 'FINALIZED'
+        ? 'succeeded'
+        : refund.status === 'CANCELED'
+          ? 'failed'
+          : 'pending';
+    return { refundId: refund.refundId, status };
+  }
+
   private getOrderId(trans: Trans<any>): string {
     const historyItem = trans.history.find((x) => x.status === 'started');
 
@@ -253,7 +345,14 @@ export class PayuService implements ITransPaymentSingleService {
       const response = await firstValueFrom(
         this.httpService.post(
           this.getBaseUrl(config) + '/pl/standard/user/oauth/authorize',
-          `grant_type=client_credentials&client_id=${config.clientId}&client_secret=${config.clientSecret}`,
+          new URLSearchParams({
+            grant_type: 'client_credentials',
+            client_id: config.clientId,
+            client_secret: config.clientSecret,
+          }).toString(),
+          {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          },
         ),
       );
 
@@ -264,17 +363,20 @@ export class PayuService implements ITransPaymentSingleService {
   }
 
   private async getConfig(data: any): Promise<PayuConfig> {
+    let provider: IPayuConfigProvider | undefined;
     try {
-      const provider: IPayuConfigProvider = this.moduleRef.get(
-        PAYU_CONFIG_PROVIDER,
-        { strict: false },
-      );
-      return await provider.get(data);
-    } catch (e) {
+      provider = this.moduleRef.get(PAYU_CONFIG_PROVIDER, { strict: false });
+    } catch {
+      provider = undefined;
+    }
+    if (!provider) {
       Logger.warn('PayU config provider not found', PayuService.name);
+      return this.config;
     }
 
-    return this.config;
+    // A provider that fails (settings missing or unreadable) stops the call:
+    // falling back to the static configuration could use other credentials.
+    return provider.get(data);
   }
 
   private getBaseUrl(config: PayuConfig): string {
@@ -289,7 +391,9 @@ export class PayuService implements ITransPaymentSingleService {
         return 'completed';
       case 'CANCELED':
         return 'canceled';
+      case 'NEW':
       case 'PENDING':
+      case 'WAITING_FOR_CONFIRMATION':
         return 'pending';
       default:
         return status;

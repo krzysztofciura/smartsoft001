@@ -4,7 +4,7 @@ import {
 } from '@smartsoft001/domain-core';
 import { ObjectService } from '@smartsoft001/utils';
 
-import { Trans, TransHistory } from './entities/trans.entity';
+import { Trans, TransHistory, TransStatus } from './entities/trans.entity';
 
 /**
  * What `setError` stores as the history payload of a failed step. Errors can
@@ -70,15 +70,25 @@ function toTransErrorEvent(
 export abstract class TransBaseService<T> {
   protected constructor(protected repository: IItemRepository<Trans<T>>) {}
 
-  protected addHistory(trans: Trans<T>, data: any): void {
+  /** Appends a history entry; `status` defaults to the transaction's current status. */
+  protected addHistory(
+    trans: Trans<T>,
+    data: any,
+    status: TransStatus = trans.status,
+  ): void {
     const historyItem = new TransHistory<T>();
     historyItem.amount = trans.amount;
     historyItem.modifyDate = trans.modifyDate;
     historyItem.data = ObjectService.removeTypes(data);
     historyItem.system = trans.system;
-    historyItem.status = trans.status;
+    historyItem.status = status;
     if (!trans.history) trans.history = [];
     trans.history.push(historyItem);
+  }
+
+  /** The safe form of an error for the history: name, a safe message and the HTTP status. */
+  protected errorEvent(error: unknown, context?: string): ITransErrorEvent {
+    return toTransErrorEvent(error, context);
   }
 
   /**

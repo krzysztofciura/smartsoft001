@@ -19,6 +19,8 @@ import {
   RefresherService,
   ITransPaymentSingleService,
   ITransInternalService,
+  ITransRefundRequest,
+  ITransRefundResult,
   RefundService,
 } from '@smartsoft001/trans-domain';
 
@@ -114,6 +116,23 @@ export class TransService {
       this._paymentService,
       comment,
     );
+  }
+
+  /** Partial, idempotent refund (see `RefundService.refundAmount`). */
+  refundAmount(
+    transId: string,
+    request: ITransRefundRequest,
+  ): Promise<ITransRefundResult> {
+    return this.refundService.refundAmount(
+      transId,
+      this._paymentService,
+      request,
+    );
+  }
+
+  /** State of the refund with this key (see `RefundService.refundStatus`). */
+  refundStatus(transId: string, key: string): Promise<ITransRefundResult> {
+    return this.refundService.refundStatus(transId, this._paymentService, key);
   }
 
   /** `null` when no transaction has that id; the caller decides what that means. */
