@@ -2,16 +2,21 @@ import { randomBytes, randomUUID } from 'crypto';
 
 import { SessionConfig } from '../lib/session.config';
 import { SessionService } from '../lib/session.service';
+import { SessionTeamService } from '../lib/session.team';
 import {
   IIdentityProvider,
   IIdentityTokens,
   IIdentityUser,
   ISessionSecurityState,
   ISessionStore,
+  ISessionTeamAccount,
+  ISessionTeamStore,
+  ISessionTeamTransaction,
   ISessionTransaction,
   IStoredSession,
   SessionAccountEvent,
   SessionError,
+  SessionTeamAction,
 } from '../lib/session.types';
 
 /** In-memory store with the semantics of `PgSessionStore`. */
@@ -222,4 +227,165 @@ export function sessionSetup(patch: Partial<SessionConfig> = {}) {
   };
   const service = new SessionService(config, store, provider);
   return { store, provider, config, service };
+}
+
+/** Team store over `MemorySessionStore` states and a list of accounts, with the rollback of `PgSessionTeamStore`. */
+export class MemoryTeamStore extends ISessionTeamStore {
+  events: {
+    actor: string;
+    subject: string;
+    action: SessionTeamAction;
+    role: string | null;
+  }[] = [];
+
+  constructor(
+    private readonly sessions: MemorySessionStore,
+    public accountList: ISessionTeamAccount[] = [],
+  ) {
+    super();
+  }
+
+  async ready(): Promise<void> {
+    return;
+  }
+
+  async roles(): Promise<Map<string, string>> {
+    return new Map(
+      [...this.sessions.states]
+        .filter(([, s]) => s.role)
+        .map(([id, s]) => [id, s.role as string]),
+    );
+  }
+
+  async members() {
+    return [...this.sessions.states]
+      .filter(([, s]) => s.role)
+      .map(([userId, s]) => ({
+        userId,
+        role: s.role as string,
+        mfaBound: s.mfaBound,
+      }));
+  }
+
+  async account(email: string): Promise<ISessionTeamAccount | null> {
+    return (
+      this.accountList.find((a) => a.email.toLowerCase() === email) ?? null
+    );
+  }
+
+  async accounts(ids: string[]): Promise<ISessionTeamAccount[]> {
+    return this.accountList.filter((a) => ids.includes(a.id));
+  }
+
+  async recent(days: number): Promise<ISessionTeamAccount[]> {
+    const since = Date.now() - days * 86400000;
+    return this.accountList
+      .filter((a) => a.createdAt && Date.parse(a.createdAt) > since)
+      .sort((a, b) => Date.parse(b.createdAt!) - Date.parse(a.createdAt!));
+  }
+
+  async change<T>(
+    work: (tx: ISessionTeamTransaction) => Promise<T>,
+  ): Promise<T> {
+    const states = new Map(
+      [...this.sessions.states].map(([id, s]) => [id, { ...s }]),
+    );
+    const sessions = new Map(this.sessions.sessions);
+    const events = this.events.length;
+    const state = (id: string) => {
+      const current = this.sessions.states.get(id) ?? {
+        revokedBefore: 0,
+        mfaBound: false,
+        role: null,
+        closing: false,
+      };
+      this.sessions.states.set(id, current);
+      return current;
+    };
+    try {
+      return await work({
+        roles: () => this.roles(),
+        set: async (id, role) => {
+          state(id).role = role;
+        },
+        remove: async (id) => {
+          state(id).role = null;
+        },
+        revoke: async (id) => {
+          state(id).revokedBefore = ++this.sessions.time;
+          for (const [hash, row] of this.sessions.sessions)
+            if (row.userId === id) this.sessions.sessions.delete(hash);
+        },
+        event: async (actor, subject, action, role) => {
+          this.events.push({ actor, subject, action, role });
+        },
+      });
+    } catch (error) {
+      this.sessions.states = states;
+      this.sessions.sessions = sessions;
+      this.events.length = events;
+      throw error;
+    }
+  }
+}
+
+/** An account of the team store: confirmed and created `daysAgo` days ago unless said otherwise. */
+export function teamAccount(
+  email: string,
+  patch: Partial<ISessionTeamAccount> & { daysAgo?: number } = {},
+): ISessionTeamAccount {
+  const { daysAgo = 1, ...rest } = patch;
+  return {
+    id: randomUUID(),
+    email,
+    createdAt: new Date(Date.now() - daysAgo * 86400000).toISOString(),
+    lastSignInAt: null,
+    confirmed: true,
+    ...rest,
+  };
+}
+
+/**
+ * A team: the provider's user is an owner with a bound authenticator, the
+ * store knows that account plus a recent one (`candidate`) and an old one
+ * (`veteran`); `ownerSession` opens an AAL2 session.
+ */
+export function teamSetup(patch: Partial<SessionConfig> = {}) {
+  const setup = sessionSetup(patch);
+  const { store, provider } = setup;
+  const factor = randomUUID();
+  provider.factors = [{ id: factor, factor_type: 'totp', status: 'verified' }];
+  store.states.set(provider.id, {
+    revokedBefore: 0,
+    mfaBound: true,
+    role: 'owner',
+    closing: false,
+  });
+  const candidate = teamAccount('nowa@example.com', { daysAgo: 2 });
+  const veteran = teamAccount('stala@example.com', { daysAgo: 400 });
+  const teamStore = new MemoryTeamStore(store, [
+    teamAccount(provider.email, {
+      id: provider.id,
+      daysAgo: 500,
+      lastSignInAt: new Date().toISOString(),
+    }),
+    candidate,
+    veteran,
+  ]);
+  const team = new SessionTeamService(setup.service, teamStore, {
+    permission: 'store:manage',
+  });
+  const ownerSession = async () => {
+    const first = await setup.service.login(provider.email, provider.secret);
+    return (await setup.service.mfa(first.cookie, factor, '123456')).cookie;
+  };
+  return {
+    ...setup,
+    teamStore,
+    team,
+    factor,
+    candidate,
+    veteran,
+    ownerSession,
+  };
 }

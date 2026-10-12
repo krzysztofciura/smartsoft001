@@ -3,11 +3,15 @@ import type { Pool, PoolClient } from 'pg';
 import {
   ISessionSecurityState,
   ISessionStore,
+  ISessionTeamAccount,
+  ISessionTeamStore,
+  ISessionTeamTransaction,
   ISessionTransaction,
   IStoredSession,
 } from './session.types';
 
 const IDENTIFIER = /^[a-z_][a-z0-9_]{0,62}$/;
+const QUALIFIED = /^[a-z_][a-z0-9_]{0,62}(\.[a-z_][a-z0-9_]{0,62})?$/;
 const CLOCK = '(extract(epoch from clock_timestamp())*1000)::bigint';
 
 function identifier(value: string, what: string): string {
@@ -175,6 +179,226 @@ export class PgSessionStore extends ISessionStore {
   }
 }
 
+/** Where `PgSessionTeamStore` keeps roles, finds the sessions it ends and reads accounts. */
+export interface IPgSessionTeamOptions {
+  /** Schema of `staff` and `staff_events`. Default `auth_session`. */
+  schema?: string;
+  /** Schema of `security` and `sessions` (the session store's), when the roles live elsewhere. Default `schema`. */
+  sessions?: string;
+  /**
+   * Table of the identity provider's accounts with the columns `id`, `email`,
+   * `created_at`, `last_sign_in_at`, `email_confirmed_at`, `deleted_at` and
+   * `is_anonymous` (Supabase Auth's `auth.users`): grant the team login
+   * SELECT on exactly these columns. Default `auth.users`.
+   */
+  identities?: string;
+}
+
+/**
+ * `ISessionTeamStore` on PostgreSQL for a login granted the team role of
+ * `sessionTablesSql` (never the session runtime): it writes roles, ends the
+ * sessions of a changed member and reads the provider's accounts, nothing
+ * more. Every change runs in one transaction under a team-wide advisory
+ * lock; revoking a member also takes that member's session lock, so a
+ * sign-in in progress cannot slip through.
+ */
+export class PgSessionTeamStore extends ISessionTeamStore {
+  private readonly schema: string;
+  private readonly sessions: string;
+  private readonly identities: string;
+
+  constructor(
+    private readonly pool: Pool,
+    options: IPgSessionTeamOptions = {},
+  ) {
+    super();
+    this.schema = identifier(options.schema ?? 'auth_session', 'team schema');
+    this.sessions = identifier(
+      options.sessions ?? this.schema,
+      'session schema',
+    );
+    const identities = options.identities ?? 'auth.users';
+    if (!QUALIFIED.test(identities)) throw new Error('Invalid identity table');
+    this.identities = identities;
+  }
+
+  async ready(): Promise<void> {
+    await this.pool.query(`SELECT 1 FROM ${this.schema}.staff LIMIT 0`);
+    await this.pool.query(`${this.accountSelect} LIMIT 0`);
+  }
+
+  async roles(): Promise<Map<string, string>> {
+    return this.rolesWith(this.pool);
+  }
+
+  async members(): Promise<
+    { userId: string; role: string; mfaBound: boolean }[]
+  > {
+    const { rows } = await this.pool.query(
+      `SELECT r.user_id, r.role, COALESCE(s.mfa_bound,false) AS mfa_bound
+       FROM ${this.schema}.staff r LEFT JOIN ${this.sessions}.security s USING(user_id)`,
+    );
+    return rows.map((row) => ({
+      userId: row.user_id,
+      role: row.role,
+      mfaBound: row.mfa_bound,
+    }));
+  }
+
+  async account(email: string): Promise<ISessionTeamAccount | null> {
+    const { rows } = await this.pool.query(
+      `${this.accountSelect} WHERE lower(email)=$1 AND deleted_at IS NULL AND COALESCE(is_anonymous,false)=false LIMIT 1`,
+      [email.toLowerCase()],
+    );
+    return rows[0] ? this.toAccount(rows[0]) : null;
+  }
+
+  async accounts(ids: string[]): Promise<ISessionTeamAccount[]> {
+    if (!ids.length) return [];
+    const { rows } = await this.pool.query(
+      `${this.accountSelect} WHERE id = ANY($1::uuid[])`,
+      [ids],
+    );
+    return rows.map((row) => this.toAccount(row));
+  }
+
+  async recent(days: number): Promise<ISessionTeamAccount[]> {
+    if (!Number.isInteger(days) || days < 1 || days > 3650)
+      throw new Error('Invalid day range');
+    const { rows } = await this.pool.query(
+      `${this.accountSelect} WHERE created_at > now() - make_interval(days => $1) AND deleted_at IS NULL AND COALESCE(is_anonymous,false)=false
+       ORDER BY created_at DESC LIMIT 100`,
+      [days],
+    );
+    return rows.map((row) => this.toAccount(row));
+  }
+
+  async change<T>(
+    work: (tx: ISessionTeamTransaction) => Promise<T>,
+  ): Promise<T> {
+    const s = this.schema;
+    const sessions = this.sessions;
+    const client = await this.pool.connect();
+    let discard = false;
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        'SELECT pg_advisory_xact_lock(hashtextextended($1,731404))',
+        [s + ':team'],
+      );
+      const tx: ISessionTeamTransaction = {
+        roles: () => this.rolesWith(client),
+        set: async (userId, role) => {
+          await client.query(
+            `INSERT INTO ${s}.staff(user_id,role) VALUES($1,$2)
+             ON CONFLICT(user_id) DO UPDATE SET role=excluded.role`,
+            [userId, role],
+          );
+        },
+        remove: async (userId) => {
+          await client.query(`DELETE FROM ${s}.staff WHERE user_id=$1`, [
+            userId,
+          ]);
+        },
+        revoke: async (userId) => {
+          await client.query(
+            'SELECT pg_advisory_xact_lock(hashtextextended($1,731403))',
+            [userId],
+          );
+          await client.query(
+            `INSERT INTO ${sessions}.security(user_id,revoked_before) VALUES($1,${CLOCK})
+             ON CONFLICT(user_id) DO UPDATE SET revoked_before=${CLOCK}`,
+            [userId],
+          );
+          await client.query(
+            `DELETE FROM ${sessions}.sessions WHERE user_id=$1`,
+            [userId],
+          );
+        },
+        event: async (actor, subject, action, role) => {
+          await client.query(
+            `INSERT INTO ${s}.staff_events(id,at_ms,actor,subject,action,role)
+             VALUES(gen_random_uuid(),${CLOCK},$1,$2,$3,$4)`,
+            [actor, subject, action, role],
+          );
+        },
+      };
+      const result = await work(tx);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        discard = true;
+      }
+      throw error;
+    } finally {
+      client.release(discard);
+    }
+  }
+
+  private get accountSelect(): string {
+    return `SELECT id, email, created_at, last_sign_in_at, email_confirmed_at FROM ${this.identities}`;
+  }
+
+  private toAccount(row: Record<string, unknown>): ISessionTeamAccount {
+    const iso = (value: unknown) =>
+      value instanceof Date
+        ? value.toISOString()
+        : value
+          ? String(value)
+          : null;
+    return {
+      id: String(row['id']),
+      email: String(row['email'] ?? ''),
+      createdAt: iso(row['created_at']),
+      lastSignInAt: iso(row['last_sign_in_at']),
+      confirmed: !!row['email_confirmed_at'],
+    };
+  }
+
+  private async rolesWith(db: Pool | PoolClient): Promise<Map<string, string>> {
+    const { rows } = await db.query(
+      `SELECT user_id, role FROM ${this.schema}.staff`,
+    );
+    return new Map(rows.map((row) => [row.user_id, row.role]));
+  }
+}
+
+/**
+ * Refuses to start the team store with a login that could do more than
+ * managing roles: superuser, `BYPASSRLS`, role or database creation, DDL in
+ * the team schema, or a login outside `teamRole`.
+ */
+export async function verifyTeamRole(
+  pool: Pool,
+  options: { schema?: string; teamRole: string },
+): Promise<void> {
+  const schema = identifier(options.schema ?? 'auth_session', 'team schema');
+  const team = identifier(options.teamRole, 'team role');
+  const { rows } = await pool.query(
+    `SELECT r.rolsuper, r.rolbypassrls, r.rolcreaterole, r.rolcreatedb,
+       pg_has_role(current_user,$1,'MEMBER') AS member,
+       has_table_privilege(current_user,$2,'INSERT,UPDATE,DELETE') AS staff_write,
+       has_schema_privilege(current_user,$3,'CREATE') AS schema_write
+     FROM pg_roles r WHERE r.rolname=current_user`,
+    [team, `${schema}.staff`, schema],
+  );
+  const r = rows[0];
+  if (
+    !r ||
+    !r.member ||
+    !r.staff_write ||
+    r.rolsuper ||
+    r.rolbypassrls ||
+    r.rolcreaterole ||
+    r.rolcreatedb ||
+    r.schema_write
+  )
+    throw new Error('Invalid team database role');
+}
+
 /**
  * Refuses to start with a database login that could do more than the
  * sessions need: superuser, `BYPASSRLS`, role or database creation, writes to
@@ -211,17 +435,30 @@ export async function verifySessionRole(
 /**
  * DDL of the session tables for a new database (a migration of the host
  * application runs it once). `roles` limits `staff.role`; `runtimeRole` is a
- * NOLOGIN role granted only what `PgSessionStore` needs; staff are assigned
- * by an administrator, never by the application. Keep the schema out of any
- * public API (e.g. PostgREST).
+ * NOLOGIN role granted only what `PgSessionStore` needs, never staff roles:
+ * those are assigned by an administrator or, with `teamRole`, by
+ * `PgSessionTeamStore` on its own login. Keep the schema out of any public
+ * API (e.g. PostgREST).
  */
 export function sessionTablesSql(options: {
   schema?: string;
   runtimeRole: string;
   roles: string[];
+  /**
+   * NOLOGIN role of `PgSessionTeamStore`: gets the roles, the sessions it
+   * ends and `staff_events`; the grant on the identity table (SELECT of the
+   * listed columns of `auth.users`) is the host application's, as that table
+   * is the provider's.
+   */
+  teamRole?: string;
 }): string {
   const s = identifier(options.schema ?? 'auth_session', 'session schema');
   const runtime = identifier(options.runtimeRole, 'runtime role');
+  const team =
+    options.teamRole === undefined
+      ? null
+      : identifier(options.teamRole, 'team role');
+  if (team === runtime) throw new Error('The team role must differ');
   if (
     !options.roles.length ||
     options.roles.some((role) => !/^[a-z][a-z0-9_-]{0,31}$/.test(role))
@@ -261,5 +498,29 @@ GRANT SELECT ON ${s}.staff TO ${runtime};
 GRANT SELECT, INSERT, UPDATE, DELETE ON ${s}.sessions, ${s}.security, ${s}.attempts TO ${runtime};
 GRANT SELECT, INSERT ON ${s}.deletion_requests TO ${runtime};
 GRANT INSERT ON ${s}.account_events TO ${runtime};
-`;
+${
+  team
+    ? `DO $$ BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='${team}') THEN
+    CREATE ROLE ${team} NOLOGIN NOSUPERUSER NOBYPASSRLS;
+  END IF;
+END $$;
+CREATE TABLE ${s}.staff_events (
+  id uuid PRIMARY KEY,
+  at_ms bigint NOT NULL,
+  actor uuid NOT NULL,
+  subject uuid NOT NULL,
+  action text NOT NULL CHECK (action IN ('grant','role','remove')),
+  role text
+);
+CREATE INDEX ON ${s}.staff_events(at_ms);
+REVOKE ALL ON ${s}.staff_events FROM PUBLIC;
+GRANT USAGE ON SCHEMA ${s} TO ${team};
+GRANT SELECT, INSERT, UPDATE, DELETE ON ${s}.staff TO ${team};
+GRANT SELECT, INSERT, UPDATE ON ${s}.security TO ${team};
+GRANT SELECT, DELETE ON ${s}.sessions TO ${team};
+GRANT SELECT, INSERT ON ${s}.staff_events TO ${team};
+`
+    : ''
+}`;
 }

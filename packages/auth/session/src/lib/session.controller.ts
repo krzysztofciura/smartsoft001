@@ -25,11 +25,13 @@ import {
   requireSessionCsrf,
   SESSION_MESSAGES,
   SESSION_MUTATIONS,
+  SESSION_TEAM_MUTATIONS,
   sessionCode,
   sessionCookie,
   sessionFields,
 } from './session.http';
 import { SESSION_UUID, sessionEmail, SessionService } from './session.service';
+import { SessionTeamService } from './session.team';
 import { SessionError } from './session.types';
 
 /** Messages and the account export of `SessionModule`. */
@@ -434,5 +436,90 @@ export class SessionAccessController {
   @All('access')
   refuse(): never {
     throw new SessionError(405, 'invalid_input');
+  }
+}
+
+/**
+ * `admin/team` (with `SessionModule.forRoot({ team })`): `GET` lists the
+ * members and the recent accounts that could join, `POST grant`
+ * `{ email, role }`, `POST role` `{ id, role }`, `POST remove` `{ id }`.
+ * The permission and AAL2 are checked by `SessionTeamService`; every POST
+ * needs CSRF, the exact origin and JSON.
+ */
+@Controller('admin/team')
+@UseFilters(SessionErrorFilter)
+export class SessionTeamController {
+  constructor(
+    @Inject(SessionTeamService) private readonly team: SessionTeamService,
+    @Inject(SessionService) private readonly service: SessionService,
+  ) {}
+
+  @Get()
+  list(@Req() req: Request) {
+    if (Object.keys(req.query ?? {}).length)
+      throw new SessionError(400, 'invalid_input');
+    return this.team.list(requestSession(req, this.service));
+  }
+
+  @Post('grant')
+  @HttpCode(200)
+  async grant(@Req() req: Request, @Body() body: unknown) {
+    await this.guard(req);
+    const b = sessionFields(body, ['email', 'role']);
+    return this.team.grant(
+      requestSession(req, this.service),
+      sessionEmail(b['email']),
+      this.text(b['role']),
+    );
+  }
+
+  @Post('role')
+  @HttpCode(200)
+  async role(@Req() req: Request, @Body() body: unknown) {
+    await this.guard(req);
+    const b = sessionFields(body, ['id', 'role']);
+    await this.team.setRole(
+      requestSession(req, this.service),
+      this.id(b['id']),
+      this.text(b['role']),
+    );
+    return { ok: true };
+  }
+
+  @Post('remove')
+  @HttpCode(200)
+  async remove(@Req() req: Request, @Body() body: unknown) {
+    await this.guard(req);
+    const b = sessionFields(body, ['id']);
+    await this.team.remove(requestSession(req, this.service), this.id(b['id']));
+    return { ok: true };
+  }
+
+  @All(['', ...SESSION_TEAM_MUTATIONS])
+  refuse(): never {
+    throw new SessionError(405, 'invalid_input');
+  }
+
+  private async guard(req: Request): Promise<void> {
+    if (Object.keys(req.query ?? {}).length)
+      throw new SessionError(400, 'invalid_input');
+    requireSessionCsrf(req, this.service);
+    await this.service.limit(
+      'ip:' + (req.socket?.remoteAddress ?? 'unknown'),
+      60,
+      600000,
+    );
+  }
+
+  private id(value: unknown): string {
+    if (typeof value !== 'string' || !SESSION_UUID.test(value))
+      throw new SessionError(400, 'invalid_input');
+    return value.toLowerCase();
+  }
+
+  private text(value: unknown): string {
+    if (typeof value !== 'string' || !/^[a-z][a-z0-9_-]{0,31}$/.test(value))
+      throw new SessionError(400, 'invalid_input');
+    return value;
   }
 }

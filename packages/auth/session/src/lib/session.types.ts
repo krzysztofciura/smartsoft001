@@ -118,6 +118,57 @@ export abstract class IIdentityProvider {
   ): Promise<IIdentityTokens>;
 }
 
+/** An account of the identity provider as the team screen shows it (never a password or token). */
+export interface ISessionTeamAccount {
+  id: string;
+  email: string;
+  createdAt: string | null;
+  lastSignInAt: string | null;
+  /** E-mail confirmed: only confirmed accounts can be given a role. */
+  confirmed: boolean;
+}
+
+/** Team change recorded with ids only. */
+export type SessionTeamAction = 'grant' | 'role' | 'remove';
+
+/** Role changes of one team, all under one lock (the last-owner rule sees every role). */
+export interface ISessionTeamTransaction {
+  /** Current role of each member. */
+  roles(): Promise<Map<string, string>>;
+  set(userId: string, role: string): Promise<void>;
+  remove(userId: string): Promise<void>;
+  /** Ends every session of the member, also those being created right now. */
+  revoke(userId: string): Promise<void>;
+  event(
+    actor: string,
+    subject: string,
+    action: SessionTeamAction,
+    role: string | null,
+  ): Promise<void>;
+}
+
+/**
+ * Storage of staff roles, written by a login separate from the session
+ * runtime, and a read-only view of the provider's accounts for the team
+ * screen (`PgSessionTeamStore` reads `auth.users` with column grants).
+ */
+export abstract class ISessionTeamStore {
+  abstract roles(): Promise<Map<string, string>>;
+  /** Members with their role and whether they ever bound an authenticator. */
+  abstract members(): Promise<
+    { userId: string; role: string; mfaBound: boolean }[]
+  >;
+  /** One account by its exact (normalized) address. */
+  abstract account(email: string): Promise<ISessionTeamAccount | null>;
+  abstract accounts(ids: string[]): Promise<ISessionTeamAccount[]>;
+  /** Accounts created in the last `days` days, newest first. */
+  abstract recent(days: number): Promise<ISessionTeamAccount[]>;
+  abstract change<T>(
+    work: (tx: ISessionTeamTransaction) => Promise<T>,
+  ): Promise<T>;
+  abstract ready(): Promise<void>;
+}
+
 /**
  * Failure with an HTTP status and a stable code; `SessionController` turns the
  * code into the configured message. Codes: `invalid_input`, `invalid_credentials`,
@@ -125,7 +176,7 @@ export abstract class IIdentityProvider {
  * `password_policy`, `password_too_long`, `too_many_attempts`, `mail_unavailable`,
  * `unavailable`, `csrf`, `account_closing`, `staff_account`, `same_email`,
  * `email_code_current`, `email_code_new`, `email_codes`, `confirmation_required`,
- * `delegation_revoked`.
+ * `delegation_revoked`, `staff_exists`, `last_owner`, `not_found`, `unconfirmed`.
  */
 export class SessionError extends Error {
   constructor(

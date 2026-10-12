@@ -25,15 +25,25 @@ export const SESSION_MUTATIONS = [
 
 export type SessionAction = (typeof SESSION_MUTATIONS)[number];
 
+/** POST actions of the team controller under `<prefix>/admin/team/`. */
+export const SESSION_TEAM_MUTATIONS = ['grant', 'role', 'remove'] as const;
+
 /**
  * Whether `path` is served by the session controllers mounted at `prefix`
  * (e.g. `/api/v1`), for an application gate that lets through only the routes
- * of enabled modules.
+ * of enabled modules. `team`: the module also serves team management.
  */
-export function sessionRoute(path: string, prefix = ''): boolean {
+export function sessionRoute(path: string, prefix = '', team = false): boolean {
   const auth = `${prefix}/auth/`;
+  const members = `${prefix}/admin/team`;
   return (
     path === `${prefix}/admin/access` ||
+    (team &&
+      (path === members ||
+        (path.startsWith(members + '/') &&
+          (SESSION_TEAM_MUTATIONS as readonly string[]).includes(
+            path.slice(members.length + 1),
+          )))) ||
     path === `${auth}session` ||
     (path.startsWith(auth) &&
       (SESSION_MUTATIONS as readonly string[]).includes(
@@ -116,6 +126,10 @@ export function sessionCode(value: unknown): string {
 
 /** Default (English) messages of `SessionError` codes; an application passes its own with `messages`. */
 export const SESSION_MESSAGES: Record<string, string> = {
+  staff_exists: 'This account is already a team member.',
+  last_owner: 'The team needs at least one owner.',
+  not_found: 'No account with this address, or no such team member.',
+  unconfirmed: 'The account has not confirmed its e-mail address yet.',
   invalid_input: 'Check the data you entered.',
   invalid_credentials: 'Invalid credentials or code. Try again.',
   session_expired: 'Your session has expired. Sign in again.',

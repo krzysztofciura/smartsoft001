@@ -101,6 +101,22 @@ export class ReportsController {
 }
 ```
 
+## Team
+
+With `team`, holders of `permission` (with an AAL2 session and CSRF) manage who is staff under `admin/team`: `GET` lists the members and the confirmed accounts created in the last `candidateDays` days (default 30) that have no role yet, `POST grant` `{ email, role }` gives an existing account a role, `POST role` `{ id, role }` changes it and `POST remove` `{ id }` takes it away. Every change ends the person's sessions (and voids work delegated by them), the last owner can never be demoted or removed, accounts are never created or deleted here, and every change is recorded in `staff_events` with ids only. `SessionTeamService.bootstrap(email)` gives the first owner of an empty team a role from a host command.
+
+Roles are written only by `PgSessionTeamStore` on its own login (`sessionTablesSql({ teamRole })` grants it the roles, the sessions it ends and `staff_events`; `verifyTeamRole` checks that login), while the session runtime keeps reading them (`verifySessionRole` still refuses a runtime that could write them). The store also reads the provider's accounts for the team screen: grant the team login SELECT on the columns `id`, `email`, `created_at`, `last_sign_in_at`, `email_confirmed_at`, `deleted_at`, `is_anonymous` of `auth.users` (or name another table with `identities`). The roles may live in a schema of their own (`schema`) next to the session tables (`sessions`).
+
+```typescript
+SessionModule.forRoot({
+  service,
+  team: {
+    permission: 'store:manage',
+    store: new PgSessionTeamStore(teamPool, { schema: 'shop_staff', sessions: 'shop_auth', identities: 'auth.users' }),
+  },
+});
+```
+
 ## Other identity providers
 
 Implement `IIdentityProvider` (password sign-in, user by token, e-mail codes, password and e-mail change, sign-out, TOTP) and pass it as `provider`. `ISessionStore` can likewise be replaced; `PgSessionStore` documents the required semantics.
