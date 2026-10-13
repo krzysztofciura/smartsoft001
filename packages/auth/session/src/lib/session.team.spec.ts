@@ -129,6 +129,61 @@ describe('auth-session: SessionTeamService', () => {
     ]);
   });
 
+  it('suspends and resumes a role, ends sessions on demand and forces a new authenticator; never on the owner themselves or the last active owner', async () => {
+    // Arrange
+    const { team, store, provider, veteran, teamStore, ownerSession } =
+      teamSetup();
+    const owner = await ownerSession();
+    const { id } = await team.grant(owner, veteran.email, 'orders');
+    const open = () =>
+      store.sessions.set('member-session', {
+        userId: id,
+        envelope: 'x',
+        expires: Date.now() + 60000,
+      });
+    open();
+
+    // Act
+    await team.suspend(owner, id);
+
+    // Assert
+    expect(store.states.get(id)?.role).toBeNull();
+    expect(store.sessions.has('member-session')).toBe(false);
+    expect(
+      (await team.list(owner)).members.find((m) => m.id === id),
+    ).toMatchObject({ role: 'orders', suspended: true });
+    await team.suspend(owner, id);
+    await team.resume(owner, id);
+    expect(store.states.get(id)?.role).toBe('orders');
+    open();
+    await team.revoke(owner, id);
+    expect(store.sessions.has('member-session')).toBe(false);
+    store.states.get(id)!.mfaBound = true;
+    await team.resetMfa(owner, id);
+    expect(store.states.get(id)?.mfaBound).toBe(false);
+    await rejected(team.suspend(owner, provider.id), 409, 'own_account');
+    await rejected(team.resetMfa(owner, provider.id), 409, 'own_account');
+    await rejected(team.revoke(owner, provider.id), 409, 'own_account');
+    await rejected(team.suspend(owner, 'missing'), 404, 'not_found');
+    await team.setRole(owner, id, 'owner');
+    await team.suspend(owner, id);
+    await rejected(
+      team.setRole(owner, provider.id, 'orders'),
+      409,
+      'last_owner',
+    );
+    await rejected(team.suspend(owner, provider.id), 409, 'own_account');
+    expect(teamStore.events.map((e) => e.action)).toEqual([
+      'grant',
+      'suspend',
+      'resume',
+      'revoke',
+      'mfa_reset',
+      'role',
+      'suspend',
+    ]);
+  });
+
   it('removes a member with their sessions and keeps the account; a failed change leaves nothing behind', async () => {
     // Arrange
     const { team, store, candidate, teamStore, ownerSession } = teamSetup();

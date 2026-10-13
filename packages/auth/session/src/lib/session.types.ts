@@ -129,14 +129,30 @@ export interface ISessionTeamAccount {
 }
 
 /** Team change recorded with ids only. */
-export type SessionTeamAction = 'grant' | 'role' | 'remove';
+export type SessionTeamAction =
+  | 'grant'
+  | 'role'
+  | 'remove'
+  | 'suspend'
+  | 'resume'
+  | 'revoke'
+  | 'mfa_reset';
 
 /** Role changes of one team, all under one lock (the last-owner rule sees every role). */
 export interface ISessionTeamTransaction {
-  /** Current role of each member. */
+  /** Current role of each member, suspended ones included. */
   roles(): Promise<Map<string, string>>;
+  /** Members whose role is suspended: kept on record, invisible to the session runtime. */
+  suspended(): Promise<Set<string>>;
   set(userId: string, role: string): Promise<void>;
   remove(userId: string): Promise<void>;
+  /** Suspends (`on`) or restores the member's role; the runtime sees no role while it is suspended. */
+  suspend(userId: string, on: boolean): Promise<void>;
+  /**
+   * Forgets the member's authenticator: the bound flag and the provider's
+   * factors, so the next sign-in has to enrol a new one before any role applies.
+   */
+  resetMfa(userId: string): Promise<void>;
   /** Ends every session of the member, also those being created right now. */
   revoke(userId: string): Promise<void>;
   event(
@@ -154,9 +170,9 @@ export interface ISessionTeamTransaction {
  */
 export abstract class ISessionTeamStore {
   abstract roles(): Promise<Map<string, string>>;
-  /** Members with their role and whether they ever bound an authenticator. */
+  /** Members with their role, whether they ever bound an authenticator and whether the role is suspended. */
   abstract members(): Promise<
-    { userId: string; role: string; mfaBound: boolean }[]
+    { userId: string; role: string; mfaBound: boolean; suspended: boolean }[]
   >;
   /** One account by its exact (normalized) address. */
   abstract account(email: string): Promise<ISessionTeamAccount | null>;

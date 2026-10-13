@@ -4,7 +4,9 @@ import { ISessionActor, SessionService } from './session.service';
 import {
   ISessionTeamAccount,
   ISessionTeamStore,
+  ISessionTeamTransaction,
   SessionError,
+  SessionTeamAction,
 } from './session.types';
 
 /** Settings of team management. */
@@ -28,6 +30,8 @@ export interface ISessionTeamMember {
   authenticator: boolean;
   /** The signed-in owner themselves. */
   self: boolean;
+  /** Role suspended by an owner: no panel until it is resumed; the account itself keeps working. */
+  suspended: boolean;
 }
 
 /**
@@ -37,7 +41,9 @@ export interface ISessionTeamMember {
  * work delegated by them; the team never loses its last owner. Roles are
  * written through `ISessionTeamStore` (a login separate from the session
  * runtime; accounts themselves are never created or deleted here) and every
- * change is recorded with ids only.
+ * change is recorded with ids only. An owner can also suspend and resume a
+ * member's role, end their sessions or force a new authenticator (`resetMfa`),
+ * never on their own account.
  */
 @Injectable()
 export class SessionTeamService {
@@ -76,6 +82,7 @@ export class SessionTeamService {
             lastSignInAt: a?.lastSignInAt ?? null,
             authenticator: m.mfaBound,
             self: m.userId === actor.id,
+            suspended: m.suspended,
           };
         })
         .sort((a, b) => a.email.localeCompare(b.email)),
@@ -112,7 +119,10 @@ export class SessionTeamService {
       const current = roles.get(id);
       if (!current) throw new SessionError(404, 'not_found');
       if (current === role) return;
-      if (current === this.owner && this.owners(roles) === 1)
+      if (
+        current === this.owner &&
+        this.owners(roles, await tx.suspended()) === 1
+      )
         throw new SessionError(409, 'last_owner');
       await tx.set(id, role);
       await tx.revoke(id);
@@ -127,11 +137,81 @@ export class SessionTeamService {
       const roles = await tx.roles();
       const current = roles.get(id);
       if (!current) throw new SessionError(404, 'not_found');
-      if (current === this.owner && this.owners(roles) === 1)
+      if (
+        current === this.owner &&
+        this.owners(roles, await tx.suspended()) === 1
+      )
         throw new SessionError(409, 'last_owner');
       await tx.remove(id);
       await tx.revoke(id);
       await tx.event(actor.id, id, 'remove', null);
+    });
+  }
+
+  /**
+   * Suspends the member's role: the panel closes at once and the account keeps
+   * working without a role until `resume`. The last active owner cannot be
+   * suspended. Repeating it changes nothing.
+   */
+  async suspend(cookie: string, id: string): Promise<void> {
+    await this.act(cookie, id, 'suspend', async (tx, roles, suspended) => {
+      if (suspended.has(id)) return false;
+      if (roles.get(id) === this.owner && this.owners(roles, suspended) === 1)
+        throw new SessionError(409, 'last_owner');
+      await tx.suspend(id, true);
+      return true;
+    });
+  }
+
+  /** Restores a suspended role; the person signs in again. */
+  async resume(cookie: string, id: string): Promise<void> {
+    await this.act(cookie, id, 'resume', async (tx, _roles, suspended) => {
+      if (!suspended.has(id)) return false;
+      await tx.suspend(id, false);
+      return true;
+    });
+  }
+
+  /** Ends every session of the member on every device; the role stays. */
+  async revoke(cookie: string, id: string): Promise<void> {
+    await this.act(cookie, id, 'revoke', async () => true);
+  }
+
+  /**
+   * Forces a new authenticator: the bound flag and the provider's factors are
+   * forgotten, every session ends, and the next sign-in has to enrol a new
+   * TOTP app before the role applies (a lost or compromised phone).
+   */
+  async resetMfa(cookie: string, id: string): Promise<void> {
+    await this.act(cookie, id, 'mfa_reset', async (tx) => {
+      await tx.resetMfa(id);
+      return true;
+    });
+  }
+
+  /**
+   * One change of one member by the managing owner: never their own account
+   * (that is the account page's job), only members, and every change ends the
+   * member's sessions and is recorded. `work` returns false when nothing changed.
+   */
+  private async act(
+    cookie: string,
+    id: string,
+    action: SessionTeamAction,
+    work: (
+      tx: ISessionTeamTransaction,
+      roles: Map<string, string>,
+      suspended: Set<string>,
+    ) => Promise<boolean>,
+  ): Promise<void> {
+    const actor = await this.authorize(cookie);
+    if (actor.id === id) throw new SessionError(409, 'own_account');
+    await this.store.change(async (tx) => {
+      const roles = await tx.roles();
+      if (!roles.has(id)) throw new SessionError(404, 'not_found');
+      if (!(await work(tx, roles, await tx.suspended()))) return;
+      await tx.revoke(id);
+      await tx.event(actor.id, id, action, roles.get(id) ?? null);
     });
   }
 
@@ -168,7 +248,13 @@ export class SessionTeamService {
       throw new SessionError(400, 'invalid_input');
   }
 
-  private owners(roles: Map<string, string>): number {
-    return [...roles.values()].filter((r) => r === this.owner).length;
+  /** Owners able to act: a suspended owner does not count, so the team never locks itself out. */
+  private owners(
+    roles: Map<string, string>,
+    suspended: Set<string> = new Set(),
+  ): number {
+    return [...roles].filter(
+      ([id, r]) => r === this.owner && !suspended.has(id),
+    ).length;
   }
 }

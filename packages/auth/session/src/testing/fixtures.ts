@@ -238,9 +238,14 @@ export class MemoryTeamStore extends ISessionTeamStore {
     role: string | null;
   }[] = [];
 
+  /** Suspended members keep their role here while the runtime state shows none. */
+  suspendedRoles = new Map<string, string>();
+
   constructor(
     private readonly sessions: MemorySessionStore,
     public accountList: ISessionTeamAccount[] = [],
+    /** Forgets the provider's factors of a member whose authenticator is reset. */
+    private readonly forgetFactors: (userId: string) => void = () => undefined,
   ) {
     super();
   }
@@ -250,21 +255,31 @@ export class MemoryTeamStore extends ISessionTeamStore {
   }
 
   async roles(): Promise<Map<string, string>> {
-    return new Map(
-      [...this.sessions.states]
+    return new Map([
+      ...[...this.sessions.states]
         .filter(([, s]) => s.role)
-        .map(([id, s]) => [id, s.role as string]),
-    );
+        .map(([id, s]) => [id, s.role as string] as [string, string]),
+      ...this.suspendedRoles,
+    ]);
   }
 
   async members() {
-    return [...this.sessions.states]
-      .filter(([, s]) => s.role)
-      .map(([userId, s]) => ({
+    return [
+      ...[...this.sessions.states]
+        .filter(([, s]) => s.role)
+        .map(([userId, s]) => ({
+          userId,
+          role: s.role as string,
+          mfaBound: s.mfaBound,
+          suspended: false,
+        })),
+      ...[...this.suspendedRoles].map(([userId, role]) => ({
         userId,
-        role: s.role as string,
-        mfaBound: s.mfaBound,
-      }));
+        role,
+        mfaBound: this.sessions.states.get(userId)?.mfaBound ?? false,
+        suspended: true,
+      })),
+    ];
   }
 
   async account(email: string): Promise<ISessionTeamAccount | null> {
@@ -291,6 +306,7 @@ export class MemoryTeamStore extends ISessionTeamStore {
       [...this.sessions.states].map(([id, s]) => [id, { ...s }]),
     );
     const sessions = new Map(this.sessions.sessions);
+    const suspended = new Map(this.suspendedRoles);
     const events = this.events.length;
     const state = (id: string) => {
       const current = this.sessions.states.get(id) ?? {
@@ -306,10 +322,32 @@ export class MemoryTeamStore extends ISessionTeamStore {
       return await work({
         roles: () => this.roles(),
         set: async (id, role) => {
-          state(id).role = role;
+          if (this.suspendedRoles.has(id)) this.suspendedRoles.set(id, role);
+          else state(id).role = role;
         },
         remove: async (id) => {
           state(id).role = null;
+          this.suspendedRoles.delete(id);
+        },
+        suspended: async () => new Set(this.suspendedRoles.keys()),
+        suspend: async (id, on) => {
+          if (on) {
+            const role = state(id).role;
+            if (role) {
+              this.suspendedRoles.set(id, role);
+              state(id).role = null;
+            }
+          } else {
+            const role = this.suspendedRoles.get(id);
+            if (role) {
+              state(id).role = role;
+              this.suspendedRoles.delete(id);
+            }
+          }
+        },
+        resetMfa: async (id) => {
+          state(id).mfaBound = false;
+          this.forgetFactors(id);
         },
         revoke: async (id) => {
           state(id).revokedBefore = ++this.sessions.time;
@@ -323,6 +361,7 @@ export class MemoryTeamStore extends ISessionTeamStore {
     } catch (error) {
       this.sessions.states = states;
       this.sessions.sessions = sessions;
+      this.suspendedRoles = suspended;
       this.events.length = events;
       throw error;
     }
@@ -371,7 +410,9 @@ export function teamSetup(patch: Partial<SessionConfig> = {}) {
     }),
     candidate,
     veteran,
-  ]);
+  ], (id) => {
+    if (id === provider.id) provider.factors = [];
+  });
   const team = new SessionTeamService(setup.service, teamStore, {
     permission: 'store:manage',
   });

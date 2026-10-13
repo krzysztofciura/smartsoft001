@@ -26,7 +26,15 @@ export const SESSION_MUTATIONS = [
 export type SessionAction = (typeof SESSION_MUTATIONS)[number];
 
 /** POST actions of the team controller under `<prefix>/admin/team/`. */
-export const SESSION_TEAM_MUTATIONS = ['grant', 'role', 'remove'] as const;
+export const SESSION_TEAM_MUTATIONS = [
+  'grant',
+  'role',
+  'remove',
+  'suspend',
+  'resume',
+  'revoke',
+  'mfa-reset',
+] as const;
 
 /**
  * Whether `path` is served by the session controllers mounted at `prefix`
@@ -128,6 +136,8 @@ export function sessionCode(value: unknown): string {
 export const SESSION_MESSAGES: Record<string, string> = {
   staff_exists: 'This account is already a team member.',
   last_owner: 'The team needs at least one owner.',
+  own_account:
+    'Your own account is managed on the account page, not in the team.',
   not_found: 'No account with this address, or no such team member.',
   unconfirmed: 'The account has not confirmed its e-mail address yet.',
   invalid_input: 'Check the data you entered.',

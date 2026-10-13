@@ -442,7 +442,9 @@ export class SessionAccessController {
 /**
  * `admin/team` (with `SessionModule.forRoot({ team })`): `GET` lists the
  * members and the recent accounts that could join, `POST grant`
- * `{ email, role }`, `POST role` `{ id, role }`, `POST remove` `{ id }`.
+ * `{ email, role }`, `POST role` `{ id, role }`, `POST remove` `{ id }`,
+ * and on one member `{ id }`: `POST suspend`, `POST resume`, `POST revoke`
+ * (end the sessions) and `POST mfa-reset` (force a new authenticator).
  * The permission and AAL2 are checked by `SessionTeamService`; every POST
  * needs CSRF, the exact origin and JSON.
  */
@@ -493,6 +495,47 @@ export class SessionTeamController {
     const b = sessionFields(body, ['id']);
     await this.team.remove(requestSession(req, this.service), this.id(b['id']));
     return { ok: true };
+  }
+
+  @Post('suspend')
+  @HttpCode(200)
+  async suspend(@Req() req: Request, @Body() body: unknown) {
+    await this.member(req, body, (cookie, id) => this.team.suspend(cookie, id));
+    return { ok: true };
+  }
+
+  @Post('resume')
+  @HttpCode(200)
+  async resume(@Req() req: Request, @Body() body: unknown) {
+    await this.member(req, body, (cookie, id) => this.team.resume(cookie, id));
+    return { ok: true };
+  }
+
+  @Post('revoke')
+  @HttpCode(200)
+  async revoke(@Req() req: Request, @Body() body: unknown) {
+    await this.member(req, body, (cookie, id) => this.team.revoke(cookie, id));
+    return { ok: true };
+  }
+
+  @Post('mfa-reset')
+  @HttpCode(200)
+  async mfaReset(@Req() req: Request, @Body() body: unknown) {
+    await this.member(req, body, (cookie, id) =>
+      this.team.resetMfa(cookie, id),
+    );
+    return { ok: true };
+  }
+
+  /** A guarded action on one member named by `{ id }`. */
+  private async member(
+    req: Request,
+    body: unknown,
+    action: (cookie: string, id: string) => Promise<void>,
+  ): Promise<void> {
+    await this.guard(req);
+    const b = sessionFields(body, ['id']);
+    await action(requestSession(req, this.service), this.id(b['id']));
   }
 
   @All(['', ...SESSION_TEAM_MUTATIONS])

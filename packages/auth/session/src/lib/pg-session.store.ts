@@ -89,7 +89,7 @@ export class PgSessionStore extends ISessionStore {
           const { rows } = await client.query(
             `SELECT s.revoked_before, s.mfa_bound, r.role,
                EXISTS(SELECT 1 FROM ${s}.deletion_requests d WHERE d.user_id=s.user_id) AS closing
-             FROM ${s}.security s LEFT JOIN ${s}.staff r USING(user_id) WHERE s.user_id=$1`,
+             FROM ${s}.security s LEFT JOIN ${s}.staff r ON r.user_id=s.user_id AND r.suspended_at IS NULL WHERE s.user_id=$1`,
             [id],
           );
           return {
@@ -192,6 +192,13 @@ export interface IPgSessionTeamOptions {
    * SELECT on exactly these columns. Default `auth.users`.
    */
   identities?: string;
+  /**
+   * Table of the provider's authenticator factors with a `user_id` column
+   * (Supabase Auth's `auth.mfa_factors`): grant the team login SELECT and
+   * DELETE, so an owner can force a member to enrol a new authenticator.
+   * Default `auth.mfa_factors`.
+   */
+  factors?: string;
 }
 
 /**
@@ -206,6 +213,7 @@ export class PgSessionTeamStore extends ISessionTeamStore {
   private readonly schema: string;
   private readonly sessions: string;
   private readonly identities: string;
+  private readonly factors: string;
 
   constructor(
     private readonly pool: Pool,
@@ -220,11 +228,17 @@ export class PgSessionTeamStore extends ISessionTeamStore {
     const identities = options.identities ?? 'auth.users';
     if (!QUALIFIED.test(identities)) throw new Error('Invalid identity table');
     this.identities = identities;
+    const factors = options.factors ?? 'auth.mfa_factors';
+    if (!QUALIFIED.test(factors)) throw new Error('Invalid factor table');
+    this.factors = factors;
   }
 
   async ready(): Promise<void> {
-    await this.pool.query(`SELECT 1 FROM ${this.schema}.staff LIMIT 0`);
+    await this.pool.query(
+      `SELECT suspended_at FROM ${this.schema}.staff LIMIT 0`,
+    );
     await this.pool.query(`${this.accountSelect} LIMIT 0`);
+    await this.pool.query(`SELECT user_id FROM ${this.factors} LIMIT 0`);
   }
 
   async roles(): Promise<Map<string, string>> {
@@ -232,16 +246,17 @@ export class PgSessionTeamStore extends ISessionTeamStore {
   }
 
   async members(): Promise<
-    { userId: string; role: string; mfaBound: boolean }[]
+    { userId: string; role: string; mfaBound: boolean; suspended: boolean }[]
   > {
     const { rows } = await this.pool.query(
-      `SELECT r.user_id, r.role, COALESCE(s.mfa_bound,false) AS mfa_bound
+      `SELECT r.user_id, r.role, r.suspended_at IS NOT NULL AS suspended, COALESCE(s.mfa_bound,false) AS mfa_bound
        FROM ${this.schema}.staff r LEFT JOIN ${this.sessions}.security s USING(user_id)`,
     );
     return rows.map((row) => ({
       userId: row.user_id,
       role: row.role,
       mfaBound: row.mfa_bound,
+      suspended: row.suspended,
     }));
   }
 
@@ -278,6 +293,7 @@ export class PgSessionTeamStore extends ISessionTeamStore {
   ): Promise<T> {
     const s = this.schema;
     const sessions = this.sessions;
+    const factors = this.factors;
     const client = await this.pool.connect();
     let discard = false;
     try {
@@ -297,6 +313,28 @@ export class PgSessionTeamStore extends ISessionTeamStore {
         },
         remove: async (userId) => {
           await client.query(`DELETE FROM ${s}.staff WHERE user_id=$1`, [
+            userId,
+          ]);
+        },
+        suspended: async () => {
+          const { rows } = await client.query(
+            `SELECT user_id FROM ${s}.staff WHERE suspended_at IS NOT NULL`,
+          );
+          return new Set<string>(rows.map((row) => row.user_id));
+        },
+        suspend: async (userId, on) => {
+          await client.query(
+            `UPDATE ${s}.staff SET suspended_at=${on ? CLOCK : 'NULL'} WHERE user_id=$1`,
+            [userId],
+          );
+        },
+        resetMfa: async (userId) => {
+          await client.query(
+            `INSERT INTO ${sessions}.security(user_id,mfa_bound) VALUES($1,false)
+             ON CONFLICT(user_id) DO UPDATE SET mfa_bound=false`,
+            [userId],
+          );
+          await client.query(`DELETE FROM ${factors} WHERE user_id=$1`, [
             userId,
           ]);
         },
@@ -473,7 +511,7 @@ END $$;
 CREATE SCHEMA ${s};
 REVOKE ALL ON SCHEMA ${s} FROM PUBLIC;
 GRANT USAGE ON SCHEMA ${s} TO ${runtime};
-CREATE TABLE ${s}.staff (user_id uuid PRIMARY KEY, role text NOT NULL CHECK (role IN (${roles})));
+CREATE TABLE ${s}.staff (user_id uuid PRIMARY KEY, role text NOT NULL CHECK (role IN (${roles})), suspended_at bigint);
 CREATE TABLE ${s}.security (user_id uuid PRIMARY KEY, revoked_before bigint NOT NULL DEFAULT 0, mfa_bound boolean NOT NULL DEFAULT false);
 CREATE TABLE ${s}.sessions (
   hash text PRIMARY KEY CHECK (hash ~ '^[a-f0-9]{64}$'),
@@ -510,7 +548,7 @@ CREATE TABLE ${s}.staff_events (
   at_ms bigint NOT NULL,
   actor uuid NOT NULL,
   subject uuid NOT NULL,
-  action text NOT NULL CHECK (action IN ('grant','role','remove')),
+  action text NOT NULL CHECK (action IN ('grant','role','remove','suspend','resume','revoke','mfa_reset')),
   role text
 );
 CREATE INDEX ON ${s}.staff_events(at_ms);
