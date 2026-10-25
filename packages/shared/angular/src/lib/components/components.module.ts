@@ -23,6 +23,7 @@ import {
   AccordionDefaultComponent,
   AccordionHeaderComponent,
 } from './accordion';
+import { BlockEditorComponent } from './block-editor';
 import { ButtonComponent, ButtonStandardComponent } from './button';
 import { CardComponent, CardStandardComponent } from './card';
 import { DateEditComponent, DateEditStandardComponent } from './date-edit';
@@ -52,6 +53,7 @@ import {
 import { DetailsComponent, DetailsStandardComponent } from './details';
 import { SharedDirectivesModule } from '../directives';
 import { ExportComponent } from './export';
+import { FileDropzoneComponent } from './file-dropzone';
 import { FormComponent, FormStandardComponent } from './form';
 import { ImportComponent } from './import';
 import { InfoComponent, InfoStandardComponent } from './info';
@@ -96,6 +98,7 @@ import {
   ListMasonryGridComponent,
 } from './list';
 import { LoaderComponent, LoaderStandardComponent } from './loader';
+import { MediaPickerComponent } from './media-picker';
 import { PageComponent, PageStandardComponent } from './page';
 import { PagingComponent, PagingStandardComponent } from './paging';
 import {
@@ -104,6 +107,8 @@ import {
 } from './password-strength';
 import { SearchbarComponent, SearchbarStandardComponent } from './searchbar';
 import { SharedPipesModule } from '../pipes/pipes.module';
+
+export const BLOCK_EDITOR_COMPONENTS = [BlockEditorComponent];
 
 export const ACCORDION_COMPONENTS: any[] = [
   AccordionComponent,
@@ -119,6 +124,8 @@ export const CARD_COMPONENTS = [CardComponent, CardStandardComponent];
 export const DETAILS_COMPONENTS = [DetailsComponent, DetailsStandardComponent];
 
 export const EXPORT_COMPONENTS = [ExportComponent];
+
+export const FILE_DROPZONE_COMPONENTS = [FileDropzoneComponent];
 
 export const IMPORT_COMPONENTS = [ImportComponent];
 
@@ -187,6 +194,8 @@ export const LIST_COMPONENTS = [
 
 export const LOADER_COMPONENTS = [LoaderComponent, LoaderStandardComponent];
 
+export const MEDIA_PICKER_COMPONENTS = [MediaPickerComponent];
+
 export const PAGE_COMPONENTS = [PageComponent, PageStandardComponent];
 
 export const PAGING_COMPONENTS = [PagingComponent, PagingStandardComponent];
@@ -215,6 +224,7 @@ export const DATE_EDIT_COMPONENTS = [
 export const DYNAMIC_COMPONENTS = [DynamicComponent];
 
 export const COMPONENTS = [
+  ...BLOCK_EDITOR_COMPONENTS,
   ...FORM_COMPONENTS,
   ...INPUT_COMPONENTS,
   ...PAGE_COMPONENTS,
@@ -225,12 +235,14 @@ export const COMPONENTS = [
   ...CARD_COMPONENTS,
   ...LIST_COMPONENTS,
   ...LOADER_COMPONENTS,
+  ...MEDIA_PICKER_COMPONENTS,
   ...PAGING_COMPONENTS,
   ...DETAIL_COMPONENTS,
   ...DETAILS_COMPONENTS,
   ...DYNAMIC_COMPONENTS,
   ...INFO_COMPONENTS,
   ...EXPORT_COMPONENTS,
+  ...FILE_DROPZONE_COMPONENTS,
   ...IMPORT_COMPONENTS,
   ...PASSWORD_STRENGTH_COMPONENTS,
   ...SEARCHBAR_COMPONENTS,

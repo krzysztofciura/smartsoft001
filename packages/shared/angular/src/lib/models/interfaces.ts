@@ -54,6 +54,9 @@ export interface IIconButtonOptions {
 }
 
 export type DynamicComponentType =
+  | 'block-editor'
+  | 'file-dropzone'
+  | 'media-picker'
   | 'form'
   | 'page'
   | 'page-heading'
