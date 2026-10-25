@@ -1,6 +1,6 @@
 # Smartsoft media, file upload and block editor — implementation plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add generic `smart-file-dropzone`, `smart-media-picker` and `smart-block-editor` components to `@smartsoft001/angular`.
 
@@ -52,12 +52,12 @@
 - Inputs: `options`, `uploader`, `cssClass`.
 - Outputs: `filesSelected: File[]`, `uploaded: { file, result }`, `uploadError: { file, error }`, `rejected: IFileDropzoneRejection`.
 
-- [ ] **Step 1: Write the failing spec** covering render, file input selection, accept/size rejection, multiple=false, drop, uploader progress, remove and disabled.
-- [ ] **Step 2: Run `npx nx test angular --testPathPattern=file-dropzone` and confirm failure.**
-- [ ] **Step 3: Add models and implement the base/component.**
-- [ ] **Step 4: Run the test until green.**
-- [ ] **Step 5: Add story and exports; run lint/build.**
-- [ ] **Step 6: Commit.**
+- [x] **Step 1: Write the failing spec** covering render, file input selection, accept/size rejection, multiple=false, drop, uploader progress, remove and disabled.
+- [x] **Step 2: Run `npx nx test angular --testPathPattern=file-dropzone` and confirm failure.**
+- [x] **Step 3: Add models and implement the base/component.**
+- [x] **Step 4: Run the test until green.**
+- [x] **Step 5: Add story and exports; run lint/build.**
+- [x] **Step 6: Commit.**
 
 ### Task 2: `smart-media-picker`
 
@@ -78,12 +78,12 @@
 - Inputs: `open` (model), `adapter` (required), `options`, `selected` (model), `cssClass`.
 - Outputs: `confirmed`, `cancelled`.
 
-- [ ] **Step 1: Write the failing spec** covering load on open, search debounce, single/multiple selection, confirm/cancel, pagination and upload/refresh.
-- [ ] **Step 2: Run `npx nx test angular --testPathPattern=media-picker` and confirm failure.**
-- [ ] **Step 3: Add models and implement the base/component using `smart-modal`, `smart-searchbar`, `smart-paging`, `smart-button`, `smart-file-dropzone`.**
-- [ ] **Step 4: Run the test until green.**
-- [ ] **Step 5: Add story and exports; run lint/build.**
-- [ ] **Step 6: Commit.**
+- [x] **Step 1: Write the failing spec** covering load on open, search debounce, single/multiple selection, confirm/cancel, pagination and upload/refresh.
+- [x] **Step 2: Run `npx nx test angular --testPathPattern=media-picker` and confirm failure.**
+- [x] **Step 3: Add models and implement the base/component using `smart-modal`, `smart-searchbar`, `smart-paging`, `smart-button`, `smart-file-dropzone`.**
+- [x] **Step 4: Run the test until green.**
+- [x] **Step 5: Add story and exports; run lint/build.**
+- [x] **Step 6: Commit.**
 
 ### Task 3: `smart-block-editor`
 
@@ -104,17 +104,26 @@
 - Inputs: `blocks` (model), `options` (required), `cssClass`.
 - Outputs: `blockAdded`, `blockRemoved`, `blockMoved`, `validityChange`.
 
-- [ ] **Step 1: Write the failing spec** covering empty state, add, update via editor outlet, move up/down, duplicate (new id), remove, validation errors, maxBlocks and readonly.
-- [ ] **Step 2: Run `npx nx test angular --testPathPattern=block-editor` and confirm failure.**
-- [ ] **Step 3: Add models and implement the base/component with `smart-card`, `smart-dropdown`, `smart-button`, `NgComponentOutlet` and `CdkDrag`.**
-- [ ] **Step 4: Run the test until green.**
-- [ ] **Step 5: Add story and exports; run lint/build.**
-- [ ] **Step 6: Commit.**
+- [x] **Step 1: Write the failing spec** covering empty state, add, update via editor outlet, move up/down, duplicate (new id), remove, validation errors, maxBlocks and readonly.
+- [x] **Step 2: Run `npx nx test angular --testPathPattern=block-editor` and confirm failure.**
+- [x] **Step 3: Add models and implement the base/component with `smart-card`, `smart-dropdown`, `smart-button`, `NgComponentOutlet` and `CdkDrag`.**
+- [x] **Step 4: Run the test until green.**
+- [x] **Step 5: Add story and exports; run lint/build.**
+- [x] **Step 6: Commit.**
 
 ### Task 4: Verification
 
-- [ ] `npx nx test angular`
-- [ ] `npx nx build angular`
-- [ ] `npx nx lint angular`
-- [ ] Review `git diff` for accidental CMS imports or secrets.
-- [ ] Commit and push the branch to `origin`.
+- [x] `npx nx test angular`
+- [x] `npx nx build angular`
+- [x] `npx nx lint angular`
+- [x] Review `git diff` for accidental CMS imports or secrets.
+- [x] Commit and push the branch to `origin`.
+
+## Verification (2026-10-25)
+
+- `npx jest --config packages/shared/angular/jest.config.ts --runInBand --testPathPatterns='(file-dropzone|media-picker|block-editor)'` — 37 tests passed.
+- `npx nx test angular --runInBand` — 331 suites, 3015 tests passed.
+- `npx nx build angular` — passed.
+- `npx nx build-storybook angular` — passed.
+- `npx eslint` on the new source files — no errors or warnings.
+- Pushed to `origin/codex/shop-integration-2.193` as commits `8fda0fc` and `e498a9a`.

@@ -1,7 +1,7 @@
 # Smartsoft media, file upload and block editor — design
 
 Date: 2026-10-25
-Status: approved direction (A/A/A), implementation follows.
+Status: implemented on `codex/shop-integration-2.193` (commits `8fda0fc`, `e498a9a`).
 Repo: `krzysztofciura/smartsoft001`, branch `codex/shop-integration-2.193`.
 
 ## Intent
