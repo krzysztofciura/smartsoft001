@@ -60,19 +60,19 @@ The dynamic module both provides and exports these bindings.
 
 ## SupabaseConfig
 
-| Field | Meaning |
-| --- | --- |
-| `db.connectionString` | PostgreSQL URL of the project (direct or pooler). Credentials never appear in errors. |
-| `db.ssl` | `true` (default) verifies the server certificate; `{ ca }` for a project certificate. TLS comes only from here, never from URL parameters. |
-| `db.max`, `db.statementTimeout` | Pool size (default `5`) and `statement_timeout` in ms (default `15000`). |
-| `table`, `schema` | Item table and its schema (default `public`). |
-| `columns` | Top-level fields also stored in their own columns, e.g. `{ ownerId: 'owner_id' }`, for indexes, typed filters and row-level security policies. |
-| `cipher` | `ISupabaseDocumentCipher`: the document is sealed into `envelope` (envelope encryption, bound to schema, table and id). Only `id` and `columns` can then be filtered or sorted; other fields are refused. |
-| `context` | Runs right after `BEGIN` of every transaction the package opens, e.g. `set_config('app.tenant', …, true)` for row-level security. |
-| `url`, `authUrl`, `storageUrl`, `anonKey`, `serviceKey` | Project URL (Auth at `/auth/v1`, Storage at `/storage/v1`, both overridable), public key for the gateway, server-only key for Storage. |
-| `bucket` | Storage bucket of the attachment repository. |
-| `changeLog` | Table for an audit row per write (`supabaseChangeLogTableSql`). Off by default: items can contain personal data. |
-| `type` | Model class whose `@Field({ search: true })` fields answer `$search`. |
+| Field                                                   | Meaning                                                                                                                                                                                                   |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `db.connectionString`                                   | PostgreSQL URL of the project (direct or pooler). Credentials never appear in errors.                                                                                                                     |
+| `db.ssl`                                                | `true` (default) verifies the server certificate; `{ ca }` for a project certificate. TLS comes only from here, never from URL parameters.                                                                |
+| `db.max`, `db.statementTimeout`                         | Pool size (default `5`) and `statement_timeout` in ms (default `15000`).                                                                                                                                  |
+| `table`, `schema`                                       | Item table and its schema (default `public`).                                                                                                                                                             |
+| `columns`                                               | Top-level fields also stored in their own columns, e.g. `{ ownerId: 'owner_id' }`, for indexes, typed filters and row-level security policies.                                                            |
+| `cipher`                                                | `ISupabaseDocumentCipher`: the document is sealed into `envelope` (envelope encryption, bound to schema, table and id). Only `id` and `columns` can then be filtered or sorted; other fields are refused. |
+| `context`                                               | Runs right after `BEGIN` of every transaction the package opens, e.g. `set_config('app.tenant', …, true)` for row-level security.                                                                         |
+| `url`, `authUrl`, `storageUrl`, `anonKey`, `serviceKey` | Project URL (Auth at `/auth/v1`, Storage at `/storage/v1`, both overridable), public key for the gateway, server-only key for Storage.                                                                    |
+| `bucket`                                                | Storage bucket of the attachment repository.                                                                                                                                                              |
+| `changeLog`                                             | Table for an audit row per write (`supabaseChangeLogTableSql`). Off by default: items can contain personal data.                                                                                          |
+| `type`                                                  | Model class whose `@Field({ search: true })` fields answer `$search`.                                                                                                                                     |
 
 ## Services & Methods
 
@@ -94,7 +94,6 @@ Supabase Storage, one immutable object per attachment id in `bucket` (or in its 
 ### SupabaseUnitOfWork
 
 The pool comes from `db`: a connection string (the package creates, configures and closes the pool), or `db.pool`, a `pg` pool the application already has — e.g. one per database login, shared by several features — which the package uses as it is and never closes.
-
 
 `scope(async (transaction) => …)` runs on one client between `BEGIN` and `COMMIT`; any error rolls back and is rethrown. `transaction.connection` is that client. A client whose rollback fails is discarded instead of returned to the pool.
 

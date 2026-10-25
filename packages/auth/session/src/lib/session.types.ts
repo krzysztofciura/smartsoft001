@@ -130,13 +130,7 @@ export interface ISessionTeamAccount {
 
 /** Team change recorded with ids only. */
 export type SessionTeamAction =
-  | 'grant'
-  | 'role'
-  | 'remove'
-  | 'suspend'
-  | 'resume'
-  | 'revoke'
-  | 'mfa_reset';
+  'grant' | 'role' | 'remove' | 'suspend' | 'resume' | 'revoke' | 'mfa_reset';
 
 /** Role changes of one team, all under one lock (the last-owner rule sees every role). */
 export interface ISessionTeamTransaction {

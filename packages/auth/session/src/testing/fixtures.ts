@@ -402,17 +402,21 @@ export function teamSetup(patch: Partial<SessionConfig> = {}) {
   });
   const candidate = teamAccount('nowa@example.com', { daysAgo: 2 });
   const veteran = teamAccount('stala@example.com', { daysAgo: 400 });
-  const teamStore = new MemoryTeamStore(store, [
-    teamAccount(provider.email, {
-      id: provider.id,
-      daysAgo: 500,
-      lastSignInAt: new Date().toISOString(),
-    }),
-    candidate,
-    veteran,
-  ], (id) => {
-    if (id === provider.id) provider.factors = [];
-  });
+  const teamStore = new MemoryTeamStore(
+    store,
+    [
+      teamAccount(provider.email, {
+        id: provider.id,
+        daysAgo: 500,
+        lastSignInAt: new Date().toISOString(),
+      }),
+      candidate,
+      veteran,
+    ],
+    (id) => {
+      if (id === provider.id) provider.factors = [];
+    },
+  );
   const team = new SessionTeamService(setup.service, teamStore, {
     permission: 'store:manage',
   });
